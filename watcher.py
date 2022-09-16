@@ -183,7 +183,7 @@ with open('config/conf.json') as config_file:
 client = discord.Client()
 
 # Todo obviously dont hardcode this
-bot_channel_ids = {1016036284206174340:4, 1016070191949557933:1, 574450161514708992:2, 1020447026481213450:2}
+bot_channel_ids = {1016036284206174340:4, 1016070191949557933:1, 574450161514708992:2, 1020447026481213450:4}
 
 @client.event
 async def on_ready():
@@ -220,13 +220,13 @@ async def on_message(message: discord.Message):
 
         # Display the current queue
     if message.content == "!help":
-        await message.channel.send("""Call the bot with `!`, any modifiers, and your prompt.
+        await message.channel.send("""Call the bot with `!`, add modifiers in any order, and your prompt.
         
 Modifiers:  
 `+` Add high quality tags
-`?` Add Random tags
+`?` Add random tags (weird)
 `#` Generate 10 images
-`^` Generate 1 image quickly
+`^` Generate 1 low-ish quality image (faster)
 `|` Everything after | is negatively weighted
 `.` no caption
 

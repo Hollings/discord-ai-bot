@@ -1,0 +1,5 @@
+- Install and run [AUTOMATIC1111's web UI](https://github.com/AUTOMATIC1111/stable-diffusion-webui)
+- Add your bot's oauth token to config/conf.json
+- Invite the bot to a discord server
+- Add one or more channel to the bot's config (todo)
+- run generator.py and watcher.py
