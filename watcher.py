@@ -189,7 +189,8 @@ bot_channel_ids = {1016036284206174340:4, 1016070191949557933:1, 574450161514708
 async def on_ready():
     print('We have logged in as {0.user}'.format(client))
 
-def queue_prompt(prompt_data:dict):
+
+def queue_prompt(prompt_data: dict):
     queue: list
     with open("prompt_queue.json", "r") as file:
         queue = json.loads(file.read())
@@ -202,7 +203,9 @@ def queue_prompt(prompt_data:dict):
 
 @client.event
 async def on_message(message: discord.Message):
-    if message.channel.id not in bot_channel_ids.keys() or message.author == client.user or not message.content[0] in "!?#+":
+    if message.channel.id not in bot_channel_ids.keys() \
+            or message.author == client.user \
+            or message.content[0] != "!":
         return
 
     # Display the current queue
@@ -210,7 +213,7 @@ async def on_message(message: discord.Message):
         queue: list
         with open("prompt_queue.json", "r") as file:
             queue = json.loads(file.read())
-        queued = [f"Seed {prompt['seed']}: {prompt['prompt']}"  for prompt in queue if not prompt['output_message_id']]
+        queued = [f"Seed {prompt['seed']}: {prompt['prompt']}" for prompt in queue if not prompt['output_message_id']]
         if len(queued) == 0:
             await message.channel.send("No prompts in the queue")
         else:
@@ -225,10 +228,12 @@ async def on_message(message: discord.Message):
 Modifiers:  
 `+` Add high quality tags
 `?` Add random tags (weird)
-`#` Generate 10 images
+`#` Generate 5 images
+`##` Generate 10 images
 `^` Generate 1 low-ish quality image (faster)
 `|` Everything after | is negatively weighted
 `.` no caption
+`%` use seed 0
 
 example: 
 > !?# A photo of a house|windows, doors
@@ -237,19 +242,21 @@ will generate 10 images of a house with random tags and attempt to avoid windows
 
     # defaults
     prompt = message.content
-    current_char = 0
     # Defaults
     added_tags = []
     n = bot_channel_ids[message.channel.id]
     model = "stable-diffusion-v1"
     steps = 40
-    seed = randint(0,100)
+    seed = randint(0, 100)
     add_artist = False
     prompt, negative_prompt = prompt.split("|") if "|" in prompt else (prompt, "")
     caption = True
 
     # Loop through the symbols at the start of the message and apply the appropriate settings
-    while current_char<len(prompt) and prompt[current_char] in "!?+$#^.":
+    current_char = 1
+    while current_char < len(prompt) and prompt[current_char] in "!?+#^$.%":
+        if prompt[current_char] == "!":
+            n += 1
         if prompt[current_char] == "?":
             added_tags.append(sample(random_tags, randint(3, 8)))
         if prompt[current_char] == "+":
@@ -258,14 +265,20 @@ will generate 10 images of a house with random tags and attempt to avoid windows
             # add a random artist tag at the end
             add_artist = True
         if prompt[current_char] == "#":
-            n = 10 # a discord message can only have 10 images max
+            if n < 5:
+                n = 5  # a discord message can only have 10 images max
+            else:
+                n = 10
         if prompt[current_char] == "^":
             n = 1
-            steps = round(steps/2)
+            steps = round(steps / 2)
         if prompt[current_char] == "$":
             model = "wd-v1-2-full-ema"
         if prompt[current_char] == ".":
             caption = False
+        if prompt[current_char] == "%":
+            seed = 0
+
         current_char += 1
 
     # append the tags to the prompt
@@ -273,8 +286,7 @@ will generate 10 images of a house with random tags and attempt to avoid windows
         prompt += " - " + " ".join([", ".join(tag) for tag in added_tags])
 
     if add_artist:
-        prompt += ". " + choice(["Photograph", "Painting", "Art", "Designed", ""]) + " by " + choice(artist_tags)
-
+        prompt += ". " + choice(["Photograph ", "Painting ", "Art ", "Designed ", ""]) + "by " + choice(artist_tags)
 
     # Remove the starting symbols from the prompt
     prompt = prompt[current_char:]
@@ -296,7 +308,7 @@ will generate 10 images of a house with random tags and attempt to avoid windows
         'quantity': n,
         'channel_id': message.channel.id,
         'message_id': message.id,
-        'seed': seed if seed else randint(0,10000),
+        'seed': seed,
         'image_path': attachment,
         'output_message_id': None,
         'model': model,
@@ -309,10 +321,5 @@ will generate 10 images of a house with random tags and attempt to avoid windows
     # React to signal it's been queued
     await message.add_reaction("😶")
 
+
 client.run(data['token'])
-
-
-
-
-
-

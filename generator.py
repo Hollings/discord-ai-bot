@@ -2,12 +2,11 @@ import asyncio
 import json
 import os
 import time
-from random import randint
-import re
-import discord
 
-from PIL import Image
+import discord
 import requests
+from wand.color import Color
+
 
 def generate_gradio_api(prompt_data):
     batch_size = 1
@@ -16,9 +15,10 @@ def generate_gradio_api(prompt_data):
     height = 512
     width = 512
     start_time = time.time()
-    model='stable-diffusion-v1'
+    model = 'stable-diffusion-v1'
     data = {"fn_index": 3,
-            "data": [prompt_data['prompt'], prompt_data['negative_prompt'], "None", prompt_data['steps'], sampler, False, False, prompt_data['quantity'], batch_size, cfg_scale, prompt_data['seed'],
+            "data": [prompt_data['prompt'], prompt_data['negative_prompt'], "None", prompt_data['steps'], sampler,
+                     False, False, prompt_data['quantity'], batch_size, cfg_scale, prompt_data['seed'],
                      -1, 0, 0, 0, height, width, "None", None, False, "Seed", "", "Steps", "", [], "", ""],
             "session_hash": "aaa"}
 
@@ -40,60 +40,50 @@ def generate_gradio_api(prompt_data):
 
 
 def add_caption_to_image(file, caption, model="", time=0, n=1):
-    # Open the file with PIL
-    image = Image.open(file)
-    # expand the image with a white border
-    margin_top = 128
-    margin_bottom = 32
-    margin_left = 32
-    margin_right = 32
-
-    x1, y1, x2, y2 = -margin_left, -margin_top, 512 + margin_right, 512 + margin_bottom  # cropping coordinates
-    cropped_image = Image.new('RGB', (x2 - x1, y2 - y1), (255, 255, 255))
-    cropped_image.paste(image, (-x1, -y1))
-
     # put text on the image
-    from PIL import ImageFont
-    from PIL import ImageDraw
-    draw = ImageDraw.Draw(cropped_image)
-    # center the text
-    # Wrap the text so it fits in the image
-    from textwrap import wrap
-    lines = wrap(caption, width=37)
-    # Draw the text
-    y_text = 16
+    from wand.image import Image as wImage
+    from wand.drawing import Drawing
+    from wand.font import Font
 
-    if len(lines) > 5:
-        lines = wrap(caption, width=70)
-        font = ImageFont.truetype("arial.ttf", 18)
-    elif len(lines) > 3:
-        lines = wrap(caption, width=42)
-        font = ImageFont.truetype("arial.ttf", 24)
-    else:
-        font = ImageFont.truetype("arial.ttf", 30)
+    seed = file.split("-")[1]
+    # expand the image with a white border
+    margin_top = 128 if len(caption) > 50 else 64
+    margin_bottom = 16
+    margin_left = 16
+    margin_right = 16
 
-    for line in lines:
-        width, height = font.getsize(line)
-        draw.text(((x2 - x1 - width) / 2, y_text), line, font=font, fill=(0, 0, 0))
-        y_text += height
+    with wImage(filename=file) as img:
+        # expand the image by margins
+        img.border(color='white', width=margin_left, height=margin_top)
+        # crop the bottom margin
+        img.crop(width=img.width, height=img.height - margin_top + margin_bottom, gravity='north')
+        # add the caption to fit in the margin_top
+        left, top, width, height = margin_left, 10, 512, margin_top - 10
+        with Drawing() as context:
+            context.fill_color = 'white'
+            context.rectangle(left=left, top=top, width=width, height=height)
+            font = Font('/System/Library/Fonts/MarkerFelt.ttc')
+            context(img)
+            img.caption(caption, left=left, top=top, width=width, height=height, font=font, gravity='center')
 
-    # small font in the bottom corner
+        # add the model, seed, and time to the bottom margin
+        left, top, width, height = 15, img.height - 15, 512, 15
+        with Drawing() as context:
+            context.fill_color = 'white'
+            context.rectangle(left=left, top=top, width=width, height=height)
+            font = Font('/System/Library/Fonts/MarkerFelt.ttc', color=Color('#AAA'))
+            context(img)
+            img.caption(f'{model}    Seed {seed}    {time} seconds', left=left, top=top, width=width, height=height,
+                        font=font, gravity='west')
+        img.save(filename=file)
 
-    font = ImageFont.truetype("arial.ttf", 12)
-    seed = file.split("\\")[-1].split("-")[1]
-    draw.text((12, 512 + margin_bottom + margin_top - 16), f'Seed {seed}        {model}', font=font, fill=(160, 160, 160))
-    draw.text((512 + margin_left + margin_right - 24, 512 + margin_bottom + margin_top - 16), f'{time}s', font=font, fill=(160, 160, 160))
 
-    cropped_image.paste(image, (-x1, -y1))
-
-    cropped_image.save(file)
-    cropped_image.close()
-
-def add_caption_to_all_images_in_folder(folder = "", model="", time=0, n=1):
+def add_caption_to_all_images_in_folder(folder="", model="", time=0, n=1):
     prompt = open(folder + '\\prompt.txt', mode="r").read()
     for file in os.listdir(folder):
         if file.endswith(".png"):
             add_caption_to_image(folder + "\\" + file, prompt, model, time, n)
+
 
 async def generate_from_queue(seen):
     # open prompt_queue.json
@@ -150,12 +140,13 @@ with open('config/conf.json') as config_file:
 class Client(discord.Client):
     seen = set()
     generating = False
+
     async def on_ready(self):
         print('Logged on as', self.user)
         client.loop.create_task(client.check_and_generate())
 
     async def check_and_generate(self):
-        while(True):
+        while (True):
             if not self.generating:
                 self.generating = True
                 self.seen = await generate_from_queue(self.seen)
@@ -163,9 +154,12 @@ class Client(discord.Client):
             await asyncio.sleep(2)
 
 
-
+#
+# short_text = "This is a test."
+# medium_text = "The quick brown fox jumps over the lazy dog. Hello"
+# long_text = "The quick brown fox jumps over the lazy dog. This is a test. Lorem Ipsum. DeprecationWarning: getsize is deprecated and will be removed in Pillow 10 (2023-07-01). Use getbbox or getlength instead."
+#
+# add_caption_to_image("Z:\\SD_outputs\\gradio\\00001-55-Peering into the soul of a Minion. Unholy eldritch horror - award winning, DSLR, intricate details, masterpiece, nature photogra (2).png", long_text, "test", 0, 1)
+# exit()
 client = Client()
 client.run(data['token'])
-
-
-
