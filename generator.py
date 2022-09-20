@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 import os
 import time
@@ -6,6 +7,20 @@ import time
 import discord
 import requests
 from wand.color import Color
+
+
+def interrogate_image(file):
+    # file to base64 data:image/png;base64,
+    with open(file, "rb") as image_file:
+        encoded_string = base64.b64encode(image_file.read())
+    data_encoded_string = "data:image/png;base64," + encoded_string.decode("utf-8")
+    data = {"fn_index": 14,
+            "data": [data_encoded_string],
+            "session_hash": "aaa"}
+    r = requests.post("http://localhost:7860/api/predict/", json=data)
+    caption = r.json()['data'][0]
+    # send a message to the channel with caption
+    return caption
 
 
 def generate_gradio_api(prompt_data):
@@ -58,7 +73,7 @@ def add_caption_to_image(file, caption, model="", time=0, n=1):
         # crop the bottom margin
         img.crop(width=img.width, height=img.height - margin_top + margin_bottom, gravity='north')
         # add the caption to fit in the margin_top
-        left, top, width, height = margin_left, 10, 512, margin_top - 10
+        left, top, width, height = margin_left, 5, 512, margin_top - 10
         with Drawing() as context:
             context.fill_color = 'white'
             context.rectangle(left=left, top=top, width=width, height=height)
@@ -73,7 +88,8 @@ def add_caption_to_image(file, caption, model="", time=0, n=1):
             context.rectangle(left=left, top=top, width=width, height=height)
             font = Font('/System/Library/Fonts/MarkerFelt.ttc', color=Color('#AAA'))
             context(img)
-            img.caption(f'{model}    Seed {seed}    {time} seconds', left=left, top=top, width=width, height=height,
+            img.caption(f'{model}        Seed {seed}        {round(time)} seconds', left=left, top=top, width=width,
+                        height=height,
                         font=font, gravity='west')
         img.save(filename=file)
 
@@ -105,9 +121,24 @@ async def generate_from_queue(seen):
                 try:
                     folder = generate_gradio_api(prompt)
                 except Exception as e:
+                    await message.remove_reaction("🤔", client.user)
                     await message.add_reaction("💀")
                     print(str(e))
                     return seen
+            else:
+                caption = interrogate_image(prompt['image_path'])
+                new_message = await message.channel.send(caption)
+                await message.remove_reaction("🤔", client.user)
+                await asyncio.sleep(2)
+                # update prompt_queue.json
+                with open('prompt_queue.json', "r") as prompt_queue_file:
+                    new_prompt_queue = json.load(prompt_queue_file)
+
+                new_prompt_queue[new_prompt_queue.index(prompt)]['output_message_id'] = new_message.id
+
+                with open('prompt_queue.json', 'w') as prompt_queue_file:
+                    prompt_queue_file.write(json.dumps(new_prompt_queue))
+                return seen
 
             # todo img2img
 
@@ -154,6 +185,8 @@ class Client(discord.Client):
             await asyncio.sleep(2)
 
 
+# interrogate_image("result.png")
+# exit()
 #
 # short_text = "This is a test."
 # medium_text = "The quick brown fox jumps over the lazy dog. Hello"

@@ -1,5 +1,7 @@
 import json
+import random
 from random import sample, randint, choice
+
 import discord
 
 random_tags = [
@@ -96,10 +98,27 @@ random_tags = [
     "dark forest",
     "matte",
     "stoic",
+    "fuji-san",
+    "cherry blossoms",
+    "happy",
+    "funeral",
+    "yeehaw",
+    "The Wiggles",
+    "purple hair",
+    "shrek",
+    "the sims 5",
+    "veggie tales",
+    "rick and morty",
+    "the office",
+    "low poly",
+    "food art",
+    "paint splatter",
+    "crop circles",
+
 ]
 
 quality_tags = [
-    "skylight",
+    "overhead lighting",
     "soft shadows",
     "muted colors",
     "ambient lighting",
@@ -203,6 +222,9 @@ def queue_prompt(prompt_data: dict):
 
 @client.event
 async def on_message(message: discord.Message):
+    if not message.content.startswith('!') and message.attachments:
+        message.content = "!" + message.content
+
     if message.channel.id not in bot_channel_ids.keys() \
             or message.author == client.user \
             or message.content[0] != "!":
@@ -233,7 +255,7 @@ Modifiers:
 `^` Generate 1 low-ish quality image (faster)
 `|` Everything after | is negatively weighted
 `.` no caption
-`%` use seed 0
+`%` use static seed (similar prompts will create similar outputs)
 
 example: 
 > !?# A photo of a house|windows, doors
@@ -247,7 +269,7 @@ will generate 10 images of a house with random tags and attempt to avoid windows
     n = bot_channel_ids[message.channel.id]
     model = "stable-diffusion-v1"
     steps = 40
-    seed = randint(0, 100)
+    seed = random.randint(0, 1000)
     add_artist = False
     prompt, negative_prompt = prompt.split("|") if "|" in prompt else (prompt, "")
     caption = True
@@ -277,7 +299,7 @@ will generate 10 images of a house with random tags and attempt to avoid windows
         if prompt[current_char] == ".":
             caption = False
         if prompt[current_char] == "%":
-            seed = 0
+            seed = 69
 
         current_char += 1
 
