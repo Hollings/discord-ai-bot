@@ -2,11 +2,21 @@ import asyncio
 import base64
 import json
 import os
+import sqlite3
 import time
 
 import discord
 import requests
 from wand.color import Color
+
+
+def generate_gradio_img2img(prompt_data):
+    with open(prompt_data['image_path'], "rb") as image_file:
+        encoded_string = base64.b64encode(image_file.read())
+    data_encoded_string = "data:image/png;base64," + encoded_string.decode("utf-8")
+    data = {"fn_index": 14,
+            "data": [data_encoded_string],
+            "session_hash": "aaa"}
 
 
 def interrogate_image(file):
@@ -46,11 +56,14 @@ def generate_gradio_api(prompt_data):
             os.remove(folder + "\\" + file)
 
     r = requests.post("http://localhost:7860/api/predict/", json=data)
+    try:
+        with open(folder + '\\prompt.txt', mode="w") as prompt_file:
+            prompt_file.write(prompt_data['prompt'])
+        if prompt_data['caption']:
+            add_caption_to_all_images_in_folder(folder, model, time.time() - start_time, prompt_data['quantity'])
+    except Exception as e:
+        print("error", str(e))
 
-    with open(folder + '\\prompt.txt', mode="w") as prompt_file:
-        prompt_file.write(prompt_data['prompt'])
-    if prompt_data['caption']:
-        add_caption_to_all_images_in_folder(folder, model, time.time() - start_time, prompt_data['quantity'])
     return folder
 
 
@@ -103,64 +116,88 @@ def add_caption_to_all_images_in_folder(folder="", model="", time=0, n=1):
 
 async def generate_from_queue(seen):
     # open prompt_queue.json
-    with open('prompt_queue.json', 'r') as prompt_queue_file:
-        prompt_queue = json.load(prompt_queue_file)
+    # with open('prompts.json', 'r') as prompt_queue_file:
+    #     prompt_queue = json.load(prompt_queue_file)
     # get the first element with None output_message_id
-    for prompt in prompt_queue:
-        if prompt['output_message_id'] is None and prompt['message_id'] not in seen:
-            seen.add(prompt['message_id'])
-            # get the discord message from "message_id"
-            channel = client.get_channel(prompt['channel_id'])
-            message = await channel.fetch_message(prompt['message_id'])
 
-            await message.remove_reaction("😶", client.user)
-            await message.add_reaction("🤔")
+    # Query sqlite for the oldest queued prompt
+    conn = sqlite3.connect('db.sqlite')
+    c = conn.cursor()
+    c.execute("SELECT * FROM prompts WHERE queued IS TRUE ORDER BY message_id ASC LIMIT 1")
+    prompt = c.fetchone()
 
-            # generate the image
-            if prompt['image_path'] is None:
-                try:
-                    folder = generate_gradio_api(prompt)
-                except Exception as e:
-                    await message.remove_reaction("🤔", client.user)
-                    await message.add_reaction("💀")
-                    print(str(e))
-                    return seen
-            else:
-                caption = interrogate_image(prompt['image_path'])
-                new_message = await message.channel.send(caption)
+    if prompt is None:
+        return seen
+
+    # result to dict
+    prompt = {
+        "prompt": prompt[0],
+        "quantity": prompt[1],
+        "channel_id": prompt[2],
+        "message_id": prompt[3],
+        "seed": prompt[4],
+        "image_path": prompt[5],
+        "output_message_id": prompt[6],
+        "model": prompt[7],
+        "negative_prompt": prompt[8],
+        "caption": prompt[9],
+        "queued": prompt[10],
+        "steps": prompt[11]
+    }
+    print(prompt)
+    if prompt is None:
+        return seen
+    if prompt['output_message_id'] is None and prompt['message_id'] not in seen:
+        seen.add(prompt['message_id'])
+        # get the discord message from "message_id"
+        channel = client.get_channel(prompt['channel_id'])
+        message = await channel.fetch_message(prompt['message_id'])
+
+        await message.remove_reaction("😶", client.user)
+        await message.add_reaction("🤔")
+
+        # generate the image
+        if prompt['image_path'] is None:
+            try:
+                folder = generate_gradio_api(prompt)
+            except Exception as e:
                 await message.remove_reaction("🤔", client.user)
-                await asyncio.sleep(2)
-                # update prompt_queue.json
-                with open('prompt_queue.json', "r") as prompt_queue_file:
-                    new_prompt_queue = json.load(prompt_queue_file)
-
-                new_prompt_queue[new_prompt_queue.index(prompt)]['output_message_id'] = new_message.id
-
-                with open('prompt_queue.json', 'w') as prompt_queue_file:
-                    prompt_queue_file.write(json.dumps(new_prompt_queue))
+                await message.add_reaction("💀")
+                print(str(e))
                 return seen
-
-            # todo img2img
-
-            # upload the images to discord
-            files = [discord.File(folder + "\\" + f) for f in os.listdir(folder) if f.endswith(".png")]
-            new_message = await message.channel.send(files=files)
-            await new_message.remove_reaction("🤔", client.user)
-
-            # update prompt_queue.json
-            with open('prompt_queue.json', "r") as prompt_queue_file:
-                new_prompt_queue = json.load(prompt_queue_file)
-
-            new_prompt_queue[new_prompt_queue.index(prompt)]['output_message_id'] = new_message.id
-
-            with open('prompt_queue.json', 'w') as prompt_queue_file:
-                prompt_queue_file.write(json.dumps(new_prompt_queue))
+        else:
+            caption = interrogate_image(prompt['image_path'])
+            new_message = await message.channel.send(caption)
             await message.remove_reaction("🤔", client.user)
             await asyncio.sleep(2)
-            time.sleep(2)
+
+            # update the db row with the output_message_id and set queued to false
+            c.execute("UPDATE prompts SET output_message_id = ?, queued = ? WHERE message_id = ?",
+                      (new_message.id, False, prompt['message_id']))
+            conn.commit()
+            conn.close()
             return seen
+
+        # todo img2img
+
+        # upload the images to discord
+        files = [discord.File(folder + "\\" + f) for f in os.listdir(folder) if f.endswith(".png")]
+        new_message = await message.channel.send(files=files)
+        await new_message.remove_reaction("🤔", client.user)
+
+        # update the db row with the output_message_id and set queued to false
+        c.execute("UPDATE prompts SET output_message_id = ?, queued = ? WHERE message_id = ?",
+                  (new_message.id, False, prompt['message_id']))
+        conn.commit()
+
+        await message.remove_reaction("🤔", client.user)
+        await asyncio.sleep(2)
+        time.sleep(2)
+        conn.close()
+        return seen
     await asyncio.sleep(2)
     time.sleep(2)
+    conn.close()
     return seen
 
 
@@ -194,5 +231,6 @@ class Client(discord.Client):
 #
 # add_caption_to_image("Z:\\SD_outputs\\gradio\\00001-55-Peering into the soul of a Minion. Unholy eldritch horror - award winning, DSLR, intricate details, masterpiece, nature photogra (2).png", long_text, "test", 0, 1)
 # exit()
+
 client = Client()
 client.run(data['token'])

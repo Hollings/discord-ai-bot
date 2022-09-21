@@ -1,5 +1,6 @@
 import json
 import random
+import sqlite3
 from random import sample, randint, choice
 
 import discord
@@ -210,14 +211,25 @@ async def on_ready():
 
 
 def queue_prompt(prompt_data: dict):
-    queue: list
-    with open("prompt_queue.json", "r") as file:
-        queue = json.loads(file.read())
+    conn = sqlite3.connect('db.sqlite')
+    c = conn.cursor()
+    c.execute("INSERT INTO prompts VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+              (
+                  prompt_data['prompt'],
+                  prompt_data['quantity'],
+                  prompt_data['channel_id'],
+                  prompt_data['message_id'],
+                  prompt_data['seed'],
+                  prompt_data['image_path'],
+                  prompt_data['output_message_id'],
+                  prompt_data['model'],
+                  prompt_data['negative_prompt'],
+                  prompt_data['caption'],
+                  True,
+                  prompt_data['steps']
+              ))
+    conn.commit()
 
-    queue.append(prompt_data)
-
-    with open("prompt_queue.json", "w") as file:
-        file.write(json.dumps(queue))
 
 
 @client.event
@@ -228,19 +240,6 @@ async def on_message(message: discord.Message):
     if message.channel.id not in bot_channel_ids.keys() \
             or message.author == client.user \
             or message.content[0] != "!":
-        return
-
-    # Display the current queue
-    if message.content == "!queue":
-        queue: list
-        with open("prompt_queue.json", "r") as file:
-            queue = json.loads(file.read())
-        queued = [f"Seed {prompt['seed']}: {prompt['prompt']}" for prompt in queue if not prompt['output_message_id']]
-        if len(queued) == 0:
-            await message.channel.send("No prompts in the queue")
-        else:
-            await message.channel.send("The following prompts are queued:")
-            await message.channel.send("\n\n>  ".join([""] + queued))
         return
 
         # Display the current queue
