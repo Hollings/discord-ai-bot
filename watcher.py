@@ -115,7 +115,8 @@ random_tags = [
     "food art",
     "paint splatter",
     "crop circles",
-
+    "90s Lan",
+    "Disposable Camera"
 ]
 
 quality_tags = [
@@ -203,7 +204,9 @@ with open('config/conf.json') as config_file:
 client = discord.Client()
 
 # Todo obviously dont hardcode this
-bot_channel_ids = {1016036284206174340:4, 1016070191949557933:1, 574450161514708992:2, 1020447026481213450:4}
+bot_channel_ids = {1016036284206174340: 1, 1016070191949557933: 1, 574450161514708992: 1, 1020447026481213450: 1,
+                   1020473974758584351: 1, 1022703575530487858: 1, 1022951067593494589: 1}
+
 
 @client.event
 async def on_ready():
@@ -213,7 +216,7 @@ async def on_ready():
 def queue_prompt(prompt_data: dict):
     conn = sqlite3.connect('db.sqlite')
     c = conn.cursor()
-    c.execute("INSERT INTO prompts VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+    c.execute("INSERT INTO prompts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
               (
                   prompt_data['prompt'],
                   prompt_data['quantity'],
@@ -226,14 +229,66 @@ def queue_prompt(prompt_data: dict):
                   prompt_data['negative_prompt'],
                   prompt_data['caption'],
                   True,
-                  prompt_data['steps']
+                  prompt_data['steps'],
+                  prompt_data['height'],
+                  prompt_data['width']
               ))
     conn.commit()
 
 
+def get_or_create_user_setting(user_id, user_name):
+    conn = sqlite3.connect('db.sqlite')
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("SELECT * FROM user_settings WHERE user_id = ?", (user_id,))
+    result = c.fetchone()
+    if result:
+        return result
+    else:
+        c.execute("INSERT INTO user_settings (user_id,user_name)values(?,?);", (user_id, user_name))
+        conn.commit()
+        return get_or_create_user_setting(user_id, user_name)
+
+
+def set_setting(option, value, user_id):
+    available_settings = ['steps', 'size']
+    if option not in available_settings:
+        return False
+    conn = sqlite3.connect('db.sqlite')
+    c = conn.cursor()
+    if option == "size":
+        width, height = value.split("x")
+        height, width = constrain_height_width(int(height), int(width))
+        c.execute("UPDATE user_settings SET height = ?, width = ? WHERE user_id = ?", (height, width, user_id))
+    if option == 'steps':
+        c.execute("UPDATE user_settings SET steps = ? WHERE user_id = ?", (min(50, value), user_id))
+    conn.commit()
+    return True
+
+
+def constrain_height_width(height, width):
+    max_pixels = 512 * 512
+    current_pixels = height * width
+    resize_ratio = max_pixels / current_pixels
+    if current_pixels > max_pixels:
+        width *= resize_ratio
+        height *= resize_ratio
+    # round them to the nearest 64
+    width = round(width / 64) * 64
+    height = round(height / 64) * 64
+    return [int(height), int(width)]
+
 
 @client.event
 async def on_message(message: discord.Message):
+    user_setting = get_or_create_user_setting(message.author.id, message.author.name)
+    if message.content.startswith('/set'):
+        parts = message.content.split(' ')
+        set = set_setting(parts[1], parts[2], message.author.id)
+        if set:
+            await message.add_reaction("✅")
+        return
+
     if not message.content.startswith('!') and message.attachments:
         message.content = "!" + message.content
 
@@ -251,14 +306,22 @@ Modifiers:
 `?` Add random tags (weird)
 `#` Generate 5 images
 `##` Generate 10 images
-`^` Generate 1 low-ish quality image (faster)
+`^` Generate a lower quality but faster image
 `|` Everything after | is negatively weighted
 `.` no caption
-`%` use static seed (similar prompts will create similar outputs)
+`%{1234}` Use a specific seed. Omitting the brackets (like `!%prompt`) will use the seed 69420
 
-example: 
-> !?# A photo of a house|windows, doors
-will generate 10 images of a house with random tags and attempt to avoid windows and doors""")
+example prompt:
+``` !?%{50}# A photo of a house|windows, doors
+```
+will generate 5 images of a house with random tags and attempt to avoid windows and doors, using the seed 50.
+
+______
+**Changing your settings**
+Use `/set` and `size` or `steps` to change your settings. For example, `/set size 512x512` will set your image size to 512x512. `/set steps 10` will set your steps to 10.
+The bot will use these settings for future images.
+""")
+
         return
 
     # defaults
@@ -267,7 +330,7 @@ will generate 10 images of a house with random tags and attempt to avoid windows
     added_tags = []
     n = bot_channel_ids[message.channel.id]
     model = "stable-diffusion-v1"
-    steps = 40
+    steps = user_setting['steps']
     seed = random.randint(0, 1000)
     add_artist = False
     prompt, negative_prompt = prompt.split("|") if "|" in prompt else (prompt, "")
@@ -298,7 +361,19 @@ will generate 10 images of a house with random tags and attempt to avoid windows
         if prompt[current_char] == ".":
             caption = False
         if prompt[current_char] == "%":
-            seed = 69
+            if prompt[current_char + 1] == "{" and "}" in prompt[current_char + 2:]:
+                num_string = ""
+                current_char += 2
+                while prompt[current_char] != "}":
+                    if not prompt[current_char].isdigit():
+                        num_string = "69420"
+                        break
+                    num_string += prompt[current_char]
+                    current_char += 1
+            else:
+                num_string = "69420"
+
+            seed = int(num_string)
 
         current_char += 1
 
@@ -307,7 +382,7 @@ will generate 10 images of a house with random tags and attempt to avoid windows
         prompt += " - " + " ".join([", ".join(tag) for tag in added_tags])
 
     if add_artist:
-        prompt += ". " + choice(["Photograph ", "Painting ", "Art ", "Designed ", ""]) + "by " + choice(artist_tags)
+        prompt += ". " + choice(["Photograph ", "Designed ", ""]) + "by " + choice(artist_tags)
 
     # Remove the starting symbols from the prompt
     prompt = prompt[current_char:]
@@ -323,10 +398,11 @@ will generate 10 images of a house with random tags and attempt to avoid windows
             await attachment.save(f"images/{attachment.filename}")
             attachment = f"images/{attachment.filename}"
 
+
     # Save it to the queue file
     prompt_data = {
         'prompt': prompt,
-        'quantity': n,
+        'quantity': min(n, 10),
         'channel_id': message.channel.id,
         'message_id': message.id,
         'seed': seed,
@@ -335,7 +411,10 @@ will generate 10 images of a house with random tags and attempt to avoid windows
         'model': model,
         'steps': steps,
         'negative_prompt': negative_prompt,
-        'caption': caption
+        'caption': caption,
+        'height': user_setting['height'],
+        'width': user_setting['width'],
+        'user_id': message.author.id,
     }
     queue_prompt(prompt_data)
 
