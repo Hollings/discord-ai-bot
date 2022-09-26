@@ -335,10 +335,9 @@ The bot will use these settings for future images.
     add_artist = False
     prompt, negative_prompt = prompt.split("|") if "|" in prompt else (prompt, "")
     caption = True
-
     # Loop through the symbols at the start of the message and apply the appropriate settings
     current_char = 1
-    while current_char < len(prompt) and prompt[current_char] in "!?+#^$.%":
+    while current_char < len(prompt) and prompt[current_char] in "!?+#^$.%{":
         if prompt[current_char] == "!":
             n += 1
         if prompt[current_char] == "?":
@@ -360,18 +359,16 @@ The bot will use these settings for future images.
             model = "wd-v1-2-full-ema"
         if prompt[current_char] == ".":
             caption = False
-        if prompt[current_char] == "%":
-            if prompt[current_char + 1] == "{" and "}" in prompt[current_char + 2:]:
-                num_string = ""
-                current_char += 2
-                while prompt[current_char] != "}":
-                    if not prompt[current_char].isdigit():
-                        num_string = "69420"
-                        break
-                    num_string += prompt[current_char]
-                    current_char += 1
-            else:
-                num_string = "69420"
+
+        if prompt[current_char] == "{" and "}" in prompt[current_char + 1:]:
+            num_string = ""
+            current_char += 1
+            while prompt[current_char] != "}":
+                if not prompt[current_char].isdigit():
+                    num_string = "69420"
+                    break
+                num_string += prompt[current_char]
+                current_char += 1
 
             seed = int(num_string)
 

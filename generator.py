@@ -101,7 +101,15 @@ def interrogate_image(file):
     return f"{response}"
 
 def generate_gradio_api(prompt_data):
+    quantity = int(prompt_data['quantity'])
     batch_size = 1
+
+    # This doesnt really give much speedup
+
+    # if prompt_data['quantity'] % 2 == 0:
+    #     batch_size = 2
+    #     quantity = int(quantity / 2)
+
     sampler = "Euler a"
     cfg_scale = 7
     height = prompt_data['height']
@@ -110,7 +118,7 @@ def generate_gradio_api(prompt_data):
     model = 'stable-diffusion-v1'
     data = {"fn_index": 3,
             "data": [prompt_data['prompt'], prompt_data['negative_prompt'], "None", prompt_data['steps'], sampler,
-                     False, False, prompt_data['quantity'], batch_size, cfg_scale, prompt_data['seed'],
+                     False, False, quantity, batch_size, cfg_scale, prompt_data['seed'],
                      -1, 0, 0, 0, int(width), int(height), "None", None, False, "Seed", "", "Steps", "", [], "", ""],
             "session_hash": "aaa"}
 
@@ -148,10 +156,12 @@ def generate_gradio_api(prompt_data):
         with open(folder + '\\prompt.txt', mode="w") as prompt_file:
             prompt_file.write(prompt_data['prompt'])
             if prompt_data['caption']:
+                seed = prompt_data['seed']
                 for file in encoded_images:
                     # print(file.split(',')[1])
                     add_caption_to_image(base64.decodebytes(file.split(",")[1].encode()), prompt_data['prompt'], model,
-                                         time.time() - start_time, prompt_data['quantity'], seed=prompt_data['seed'])
+                                         time.time() - start_time, prompt_data['quantity'], seed=seed)
+                    seed += 1
 
     except Exception as e:
         # print full stack trace
