@@ -322,35 +322,6 @@ class Client(discord.Client):
                 self.generating = False
             await asyncio.sleep(2)
 
-
-# interrogate_image("result.png")
-# exit()
-#
-# short_text = "This is a test."
-# medium_text = "The quick brown fox jumps over the lazy dog. Hello"
-# long_text = "The quick brown fox jumps over the lazy dog. This is a test. Lorem Ipsum. DeprecationWarning: getsize is deprecated and will be removed in Pillow 10 (2023-07-01). Use getbbox or getlength instead."
-#
-# add_caption_to_image("Z:\\SD_outputs\\gradio\\00001-55-Peering into the soul of a Minion. Unholy eldritch horror - award winning, DSLR, intricate details, masterpiece, nature photogra (2).png", long_text, "test", 0, 1)
-# exit()
-# add_caption_to_image("Z:\\SD_outputs\\gradio\\0.png", long_text, "test", 0, 1)
-#
-# exit()
-# Something,1,1016070191949557933,1022559579688673331,843,,,stable-diffusion-v1,"",1,1,20
-
-# generate_gradio_api({
-#     "prompt": "aaa",
-#     "quantity": 1,
-#     "channel_id": 1016070191949557933,
-#     "message_id": 1022559579688673331,
-#     "seed": 1,
-#     "image_path": None,
-#     "output_message_id": None,
-#     "model": "stable-diffusion-v1",
-#     "negative_prompt": "",
-#     "caption": 1,
-#     "queued": 1,
-#     "steps": 5
-# })
 openai.api_key = data['openai']
 client = Client()
 client.run(data['token'])
