@@ -168,6 +168,7 @@ quality_tags = [
     "Canon",
     "depth of field",
     "35mm",
+    "tilt shift photography",
 ]
 
 artist_tags = [
@@ -216,6 +217,10 @@ async def on_ready():
 def queue_prompt(prompt_data: dict):
     conn = sqlite3.connect('db.sqlite')
     c = conn.cursor()
+
+    # strip unencoded characters
+    prompt_data['prompt'] = prompt_data['prompt'].encode('ascii', 'ignore').decode('ascii')
+
     c.execute("INSERT INTO prompts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
               (
                   prompt_data['prompt'],
@@ -359,6 +364,8 @@ The bot will use these settings for future images.
             model = "wd-v1-2-full-ema"
         if prompt[current_char] == ".":
             caption = False
+        if prompt[current_char] == "%":
+            seed = 69420
 
         if prompt[current_char] == "{" and "}" in prompt[current_char + 1:]:
             num_string = ""
