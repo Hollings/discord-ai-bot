@@ -4,6 +4,7 @@ import sqlite3
 from random import sample, randint, choice
 
 import discord
+import requests
 
 random_tags = [
     "concept art",
@@ -218,9 +219,6 @@ def queue_prompt(prompt_data: dict):
     conn = sqlite3.connect('db.sqlite')
     c = conn.cursor()
 
-    # strip unencoded characters
-    prompt_data['prompt'] = prompt_data['prompt'].encode('ascii', 'ignore').decode('ascii')
-
     c.execute("INSERT INTO prompts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
               (
                   prompt_data['prompt'],
@@ -286,18 +284,18 @@ def constrain_height_width(height, width):
 
 @client.event
 async def on_message(message: discord.Message):
+    # if not message.guild and message.author != client.user:
+    #     await message.channel.send('this is a dm')
+
     user_setting = get_or_create_user_setting(message.author.id, message.author.name)
     if message.content.startswith('/set'):
-        parts = message.content.split(' ')
-        set = set_setting(parts[1], parts[2], message.author.id)
-        if set:
-            await message.add_reaction("✅")
+        await set_user_setting(message.content)
         return
 
     if not message.content.startswith('!') and message.attachments:
         message.content = "!" + message.content
 
-    if message.channel.id not in bot_channel_ids.keys() \
+    if (message.guild and message.channel.id not in bot_channel_ids.keys()) \
             or message.author == client.user \
             or message.content[0] != "!":
         return
@@ -313,18 +311,14 @@ Modifiers:
 `##` Generate 10 images
 `^` Generate a lower quality but faster image
 `|` Everything after | is negatively weighted
-`.` no caption
-`%{1234}` Use a specific seed. Omitting the brackets (like `!%prompt`) will use the seed 69420
+`.` No caption
+`{1234}` Use a specific seed.
+`%` Use seed 69420
 
 example prompt:
-``` !?%{50}# A photo of a house|windows, doors
+``` !?{50}# A photo of a house|windows, doors
 ```
 will generate 5 images of a house with random tags and attempt to avoid windows and doors, using the seed 50.
-
-______
-**Changing your settings**
-Use `/set` and `size` or `steps` to change your settings. For example, `/set size 512x512` will set your image size to 512x512. `/set steps 10` will set your steps to 10.
-The bot will use these settings for future images.
 """)
 
         return
@@ -333,9 +327,10 @@ The bot will use these settings for future images.
     prompt = message.content
     # Defaults
     added_tags = []
-    n = bot_channel_ids[message.channel.id]
+    n = bot_channel_ids[message.channel.id] if message.guild else 1
     model = "stable-diffusion-v1"
     steps = user_setting['steps']
+
     seed = random.randint(0, 1000)
     add_artist = False
     prompt, negative_prompt = prompt.split("|") if "|" in prompt else (prompt, "")
@@ -353,10 +348,7 @@ The bot will use these settings for future images.
             # add a random artist tag at the end
             add_artist = True
         if prompt[current_char] == "#":
-            if n < 5:
-                n = 5  # a discord message can only have 10 images max
-            else:
-                n = 10
+            n += 5
         if prompt[current_char] == "^":
             n = 1
             steps = round(steps / 2)
@@ -380,6 +372,15 @@ The bot will use these settings for future images.
             seed = int(num_string)
 
         current_char += 1
+
+    if steps <= 20:
+        n = min(n, 10)
+    else:
+        n = min(n, 5)
+
+    if not message.guild:
+        n = 1
+        steps = 20
 
     # append the tags to the prompt
     if added_tags:
@@ -422,8 +423,23 @@ The bot will use these settings for future images.
     }
     queue_prompt(prompt_data)
 
-    # React to signal it's been queued
+    # ping http://localhost:7860/ and react if its down
     await message.add_reaction("😶")
+
+    try:
+        requests.get("http://localhost:7860/")
+    except:
+        await message.remove_reaction("😶", client.user)
+        await message.add_reaction("😴")
+        return
+    # React to signal it's been queued
+
+
+async def set_user_setting(message):
+    parts = message.split(' ')
+    set = set_setting(parts[1], parts[2], message.author.id)
+    if set:
+        await message.add_reaction("✅")
 
 
 client.run(data['token'])

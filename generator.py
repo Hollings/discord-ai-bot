@@ -4,6 +4,7 @@ import json
 import os
 import random
 import sqlite3
+import subprocess
 import time
 
 import discord
@@ -46,7 +47,7 @@ def generate_gradio_img2img(prompt_data):
             "session_hash": "aaa"}
 
 
-def interrogate_image(file):
+def interrogate_image(file, prompt):
     # file to base64 data:image/png;base64,
     with open(file, "rb") as image_file:
         encoded_string = base64.b64encode(image_file.read())
@@ -84,12 +85,20 @@ def interrogate_image(file):
     response = ""
     for i in range(0, 5):
         if len(response) < 10:
-            choice = random.choice(gpt_options)
+            if not prompt:
+                choice = f"""The following is a description of an image: '{caption}'
+                
+                {random.choice(gpt_options)}"""
+            else:
+                choice = f"""The following is a description of an image: '{caption}'
+                
+                {prompt}
+                
+                """
+
             response = openai.Completion.create(
                 engine="text-davinci-001",
-                prompt=f"""The following is a description of an image: '{caption}'
-                
-                {choice}""",
+                prompt=choice,
                 max_tokens=200,
                 temperature=1.0,
                 echo=False,
@@ -154,6 +163,9 @@ def generate_gradio_api(prompt_data):
 
         print("adding captions")
         with open(folder + '\\prompt.txt', mode="w") as prompt_file:
+            # strip unencoded characters
+            prompt_data['prompt'] = prompt_data['prompt'].encode('ascii', 'ignore').decode('ascii')
+
             prompt_file.write(prompt_data['prompt'])
             if prompt_data['caption']:
                 seed = prompt_data['seed']
@@ -261,6 +273,7 @@ async def generate_from_queue(seen):
         message = await channel.fetch_message(prompt['message_id'])
 
         await message.remove_reaction("😶", client.user)
+        await message.remove_reaction("😴", client.user)
         await message.add_reaction("🤔")
 
         # generate the image
@@ -273,7 +286,7 @@ async def generate_from_queue(seen):
                 print(str(e))
                 return seen
         else:
-            caption = interrogate_image(prompt['image_path'])
+            caption = interrogate_image(prompt['image_path'], prompt['prompt'])
             if not caption:
                 caption = "I don't know."
             new_message = await message.channel.send(caption, reference=message)
@@ -332,6 +345,18 @@ class Client(discord.Client):
                 self.generating = False
             await asyncio.sleep(2)
 
+
 openai.api_key = data['openai']
+# run bat file in the background
+p = subprocess.call(["start", "webui.bat"], shell=True, cwd=r"Z:/Documents/stable-diffusion-webui/")
+print("Waiting for webui to start...", end="")
+while True:
+    try:
+        requests.get("http://localhost:7860/")
+        break
+    except:
+        print(".", end="")
+        time.sleep(5)
+print("")
 client = Client()
 client.run(data['token'])
