@@ -12,6 +12,8 @@ images on demand.
 - Automatic upscaling of generated images
 - Generate text from an uploaded image
 
+![image](https://user-images.githubusercontent.com/3793509/193608535-2eb98e0f-99fa-4132-8636-71e1aaec4d93.png)
+
 ## Install and Run
 
 - Install [AUTOMATIC1111's web UI](https://github.com/AUTOMATIC1111/stable-diffusion-webui)
