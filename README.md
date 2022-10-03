@@ -9,6 +9,7 @@ images on demand.
 
 - Generate one or more Stable Diffusion images from a prompt in whitelisted discord channels
 - Use modifiers in the Discord message to add tags to the prompt, generate more images, change steps, etc
+- Automatic upscaling of generated images
 - Generate text from an uploaded image
 
 ## Install and Run
