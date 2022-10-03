@@ -2,6 +2,7 @@ import json
 import time
 
 import discord
+import requests
 from dotenv import dotenv_values
 from peewee import *
 
@@ -84,6 +85,15 @@ class Client(discord.Client):
             await generate_queued_prompts()
             time.sleep(1)
 
+
+print("Waiting for webui to start...", end="")
+while True:
+    try:
+        requests.get("http://localhost:7860/")
+        break
+    except:
+        print(".", end="")
+        time.sleep(5)
 
 client = Client()
 client.run(config['DISCORD_TOKEN'])
