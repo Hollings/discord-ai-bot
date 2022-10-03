@@ -2,6 +2,7 @@
 
 ![img.png](img.png)
 Hollingsbot 2 is a Discord bot that interfaces
+
 with [AUTOMATIC1111's web UI](https://github.com/AUTOMATIC1111/stable-diffusion-webui) to generate Stable Diffusion
 images on demand.
 
