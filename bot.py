@@ -50,8 +50,10 @@ async def on_message(message: discord.Message):
     if len(message.attachments) >= 1:
         files = await download_attachments_from_message(message)
         prompt.image_paths = json.dumps([file.data for file in files])
-    if message.content.startswith("!"):
-        prompt.apply_modifiers()
+    elif not message.content.startswith("!"):
+        return
+
+    prompt.apply_modifiers()
 
     if prompt.seed == -1:
         prompt.seed = random.randint(0, 1000)
