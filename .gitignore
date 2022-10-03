@@ -1,0 +1,5 @@
+/.env
+/bot.db
+/images/*
+/.idea/*
+/tmp/*
