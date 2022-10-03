@@ -38,7 +38,7 @@ class Prompt(Model):
         add_artist = False
 
         if "|" in self.prompt:
-            self.prompt, self.negative_prompt = str(self.prompt).split("|")
+            self.prompt, self.negative_prompt = str(self.prompt).split("|", 1)
 
         # load tags.json
         with open('config/tags.json') as tags_file:
