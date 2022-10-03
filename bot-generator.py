@@ -48,6 +48,8 @@ async def send_text_to_discord(text_list, prompt):
 async def generate_queued_prompts():
     prompt = get_oldest_queued_prompt()
     while prompt:
+        prompt.queued = False
+        prompt.save()
         await do_prompt(prompt)
         prompt = get_oldest_queued_prompt()
 
