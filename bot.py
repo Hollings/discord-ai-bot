@@ -25,8 +25,6 @@ def init_db(migrate: bool = False):
     if migrate:
         db.drop_tables([Prompt, UserSetting, ChannelConfig])
         db.create_tables([Prompt, UserSetting, ChannelConfig])
-    ChannelConfig(channel_id='1022951067593494589').save()
-
 
 @client.event
 async def on_ready():
