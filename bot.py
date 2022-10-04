@@ -23,8 +23,8 @@ config = dotenv_values('.env')
 def init_db(migrate: bool = False):
     db.connect()
     if migrate:
-        db.drop_tables([Prompt, UserSetting, ChannelConfig])
-        db.create_tables([Prompt, UserSetting, ChannelConfig])
+        db.drop_tables([Prompt, UserSetting])
+        db.create_tables([Prompt, UserSetting])
 
 @client.event
 async def on_ready():
@@ -45,7 +45,7 @@ async def on_message(message: discord.Message):
     if message.content == "!help":
         await message.channel.send(config["HELP_MESSAGE"])
 
-    prompt = Prompt(prompt=message.content, channel_id=message.channel.id, message_id=message.id)
+    prompt = Prompt(prompts=[message.content], channel_id=message.channel.id, message_id=message.id)
 
     if len(message.attachments) >= 1:
         files = await download_attachments_from_message(message)
@@ -64,6 +64,18 @@ async def on_message(message: discord.Message):
     except:
         await message.remove_reaction("😶", client.user)
         await message.add_reaction("😴")
+
+
+@client.event
+async def on_reaction_add(reaction: discord.Reaction, user: discord.User):
+    if (reaction.message.author != client.user) or len(reaction.message.reactions) > 1:
+        return
+    # get link of attachment
+    link = reaction.message.attachments[0].url if len(reaction.message.attachments) >= 1 else ""
+    # get channel by id
+    channel = client.get_channel(1026644569602924555)
+    # send message with link
+    await channel.send(reaction.message.jump_url + "\n" + link)
 
 
 async def download_attachments_from_message(message: discord.Message) -> list[ImageData]:

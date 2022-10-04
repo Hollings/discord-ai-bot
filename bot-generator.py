@@ -1,4 +1,6 @@
+import asyncio
 import json
+import logging
 import time
 
 import discord
@@ -16,65 +18,36 @@ config = dotenv_values('.env')
 
 
 def get_oldest_queued_prompt() -> Prompt:
-    return Prompt.select().where(Prompt.queued == True).order_by(Prompt.id).first()
+    return Prompt.select().where(Prompt.status == "pending").order_by(Prompt.id).first()
 
 
-async def dequeue_prompt(prompt: Prompt, message):
-    prompt.queued = False
-    prompt.output_message_id = message.id
-    channel = client.get_channel(prompt.channel_id)
-    input_message = await channel.fetch_message(prompt.message_id)
-    await input_message.add_reaction("✅")
-    await input_message.remove_reaction("😶", client.user)
-    await input_message.remove_reaction("😴", client.user)
-    await input_message.remove_reaction("🤔", client.user)
+def dequeue_prompt(prompt: Prompt, out_message=None):
+    prompt.status = "complete"
+    # prompt.output_message_id = out_message.id
     prompt.save()
 
 
-async def send_image_to_discord(image_data: ImageData, prompt):
-    channel = client.get_channel(prompt.channel_id)
-    message = await channel.fetch_message(prompt.message_id)
-    new_message = await message.channel.send(file=image_data.encode_to_discord_file())
-    return new_message
-
-
-async def send_text_to_discord(text_list, prompt):
-    channel = client.get_channel(prompt.channel_id)
-    message = await channel.fetch_message(prompt.message_id)
-    new_message = await message.channel.send("\n___\n".join(text_list))
-    return new_message
-
-
-async def generate_queued_prompts():
-    prompt = get_oldest_queued_prompt()
-    while prompt:
-        prompt.queued = False
-        prompt.save()
-        await do_prompt(prompt)
-        prompt = get_oldest_queued_prompt()
-
-
-async def do_prompt(prompt: Prompt):
+def do_prompt(prompt: Prompt, message):
+    print("======")
+    print("Generating prompt: " + prompt.prompts[0])
     image_paths = json.loads(prompt.image_paths)
     output_message = None
-    channel = client.get_channel(prompt.channel_id)
-    message = await channel.fetch_message(prompt.message_id)
-    await message.remove_reaction("😶", client.user)
-    await message.add_reaction("🤔")
+    prompts = json.loads(prompt.prompts)
+    files = []
+    images_description_list = []
     if not image_paths:
-        for i in range(prompt.quantity):
-            image_data_list = generate_txt_to_img(prompt, 1)
-            for image_data in image_data_list:
-                image_data.upscale()
-                image_data.add_caption_to_image(prompt.prompt, f"Seed: {prompt.seed}")
-                # sending one image at a time, but we'll just save any one of the messages to log to the prompt db
-                output_message = await send_image_to_discord(image_data, prompt)
-            prompt.seed += 1
-    else:
-        images_description_list = [generate_img_to_txt(ImageData(image)) for image in image_paths]
-        output_message = await send_text_to_discord(images_description_list, prompt)
 
-    await dequeue_prompt(prompt, output_message)
+        image_data_list = generate_txt_to_img(prompt)
+
+        for i, image_data in enumerate(image_data_list):
+            image_data.upscale()
+            image_data.add_caption_to_image(prompts[i], f"Seed: {prompt.seed}")
+            # sending one image at a time, but we'll just save any one of the messages to log to the prompt db
+            files.append(image_data.encode_to_discord_file())
+    else:
+        images_description_list = [generate_img_to_txt(ImageData(image), prompts[0]) for image in image_paths]
+
+    return files, images_description_list
 
 
 class Client(discord.Client):
@@ -83,9 +56,35 @@ class Client(discord.Client):
         client.loop.create_task(client.check_and_generate())
 
     async def check_and_generate(self):
-        while (True):
-            await generate_queued_prompts()
-            time.sleep(1)
+        seen = []
+        prompt = get_oldest_queued_prompt()
+        if prompt and prompt not in seen:
+            seen.append(prompt)
+            print("getting prompt")
+            channel = client.get_channel(prompt.channel_id)
+            message = await channel.fetch_message(prompt.message_id)
+
+            await message.add_reaction("🤔")
+
+            files, descriptions = do_prompt(prompt, message)
+
+            for file in files:
+                output_message = await asyncio.wait_for(channel.send(file=file), timeout=60.0)
+            for description in descriptions:
+                output_message = await asyncio.wait_for(channel.send(description), timeout=60.0)
+
+            dequeue_prompt(prompt)
+            await message.clear_reactions()
+            await message.add_reaction("✅")
+            print("finished prompt")
+            time.sleep(10)
+        client.loop.create_task(client.check_and_generate())
+
+    async def on_error(self, event_method, *args, **kwargs):
+        print("error")
+        print(event_method)
+        print(args)
+        print(kwargs)
 
 
 print("Waiting for webui to start...", end="")
@@ -96,6 +95,8 @@ while True:
     except:
         print(".", end="")
         time.sleep(5)
+
+logging.basicConfig(level=logging.DEBUG)
 
 client = Client()
 client.run(config['DISCORD_TOKEN'])

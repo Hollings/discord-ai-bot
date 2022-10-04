@@ -1,5 +1,6 @@
 import base64
 import io
+import json
 import random
 
 import discord
@@ -87,17 +88,43 @@ class ImageData():
         self.data = r.json()['data'][0]
 
 
-def generate_txt_to_img(prompt: Prompt, quantity=None) -> [ImageData]:
+def generate_txt_to_img(prompt: Prompt) -> [ImageData]:
     config = dotenv_values('.env')
 
-    if not quantity:
-        quantity = prompt.quantity
+    prompt_list = json.loads(prompt.prompts)
+    prompt_list_text = "\n".join(prompt_list)
+
+    b64_prompt = base64.b64encode(prompt_list_text.encode()).decode('utf-8')
+    b64_prompt = "data:text/plain;base64," + b64_prompt
     data = {"fn_index": 3,
-            "data": [prompt.prompt, prompt.negative_prompt, "None", prompt.steps, config['SAMPLER'], False, False,
-                     quantity,
-                     int(config['BATCH_SIZE']), int(config["CFG_SCALE"]), prompt.seed, -1, 0, 0, 0, prompt.width,
+            "data": ["",
+                     prompt.negative_prompt,
+                     "None",
+                     prompt.steps,
+                     config['SAMPLER'],
+                     False,
+                     False,
+                     1,
+                     int(config['BATCH_SIZE']),
+                     int(config["CFG_SCALE"]),
+                     prompt.seed,
+                     -1,
+                     0,
+                     0,
+                     0,
+                     prompt.width,
                      prompt.height,
-                     "None", None, False, "Seed", "", "Steps", "", [], "", ""], "session_hash": "aaa"}
+                     "Prompts from file",
+                     {'name': "file.txt", "size": len(prompt_list_text) + len(prompt_list) - 1, "data": b64_prompt},
+                     False,
+                     "Seed",
+                     "",
+                     "Steps",
+                     "",
+                     [],
+                     "",
+                     ""],
+            "session_hash": "aaa"}
 
     r = requests.post("http://localhost:7860/api/predict/", json=data)
     encoded_images = r.json()['data'][0]
