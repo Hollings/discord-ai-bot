@@ -68,12 +68,14 @@ async def on_message(message: discord.Message):
 
 @client.event
 async def on_reaction_add(reaction: discord.Reaction, user: discord.User):
-    if (reaction.message.author != client.user) or len(reaction.message.reactions) > 1:
+    if (user == client.user) or len(reaction.message.reactions) > 1:
         return
     # get link of attachment
     link = reaction.message.attachments[0].url if len(reaction.message.attachments) >= 1 else ""
     # get channel by id
     channel = client.get_channel(1026644569602924555)
+    if channel.guild != reaction.message.guild:
+        return
     # send message with link
     await channel.send(reaction.message.jump_url + "\n" + link)
 

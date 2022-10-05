@@ -29,17 +29,18 @@ def dequeue_prompt(prompt: Prompt, out_message=None):
 
 def do_prompt(prompt: Prompt, message):
     print("======")
-    print("Generating prompt: " + prompt.prompts[0])
     image_paths = json.loads(prompt.image_paths)
     output_message = None
     prompts = json.loads(prompt.prompts)
+    print("Generating prompt: " + prompts[0])
     files = []
     images_description_list = []
     if not image_paths:
         image_data_list = generate_txt_to_img(prompt)
         for i, image_data in enumerate(image_data_list):
             image_data.upscale()
-            image_data.add_caption_to_image(prompts[i], f"Seed: {prompt.seed}")
+            if prompt.apply_caption:
+                image_data.add_caption_to_image(prompts[i], f"Seed: {prompt.seed}")
             # sending one image at a time, but we'll just save any one of the messages to log to the prompt db
             files.append(image_data.encode_to_discord_file())
             prompt.seed += 1

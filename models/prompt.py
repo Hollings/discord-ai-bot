@@ -88,7 +88,7 @@ class Prompt(Model):
             if add_random_tags:
                 added_tags.append(sample(tags['random'], randint(1, 3)))
             if add_artist:
-                added_tags.append(sample(tags['random'], 1))
+                added_tags.append(sample(tags['artist'], 1))
             if added_tags:
                 prompt += " - " + " ".join([", ".join(tag) for tag in added_tags])
             self.prompts[i] = prompt
