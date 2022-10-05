@@ -73,7 +73,7 @@ class Client(discord.Client):
                 input_coroutines = [channel.send(file=file) for file in files]
                 res = await asyncio.gather(*input_coroutines, return_exceptions=True)
             for description in descriptions:
-                output_message = await asyncio.wait_for(channel.send(description), timeout=60.0)
+                output_message = await asyncio.wait_for(channel.send(description, reference=message), timeout=60.0)
 
             dequeue_prompt(prompt)
             await message.clear_reactions()
