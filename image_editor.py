@@ -70,22 +70,24 @@ class ImageData():
     def upscale(self, size=2):
         # print(encoded_image)
         data = {
-            "fn_index": 20,
+            "fn_index": 39,
             "data": [
+                0,
                 self.data,
+                None,
                 0,
                 0,
                 0,
                 size,
                 "Lanczos",
                 "None",
-                1
+                1, [], "", ""
             ],
             "session_hash": "abasbasb"
         }
         r = requests.post("http://localhost:7860/api/predict/", json=data)
         # print(r.json())
-        self.data = r.json()['data'][0]
+        self.data = r.json()['data'][0][0]
 
 
 def generate_txt_to_img(prompt: Prompt) -> [ImageData]:
@@ -93,18 +95,24 @@ def generate_txt_to_img(prompt: Prompt) -> [ImageData]:
 
     prompt_list = json.loads(prompt.prompts)
     prompt_list_text = "\n".join(prompt_list)
-
+    # if every prompt is the same
+    if len(set(prompt_list)) == 1:
+        prompt_list_text = prompt_list[0]
+        quantity = len(prompt_list)
+    else:
+        quantity = 1
     b64_prompt = base64.b64encode(prompt_list_text.encode()).decode('utf-8')
     b64_prompt = "data:text/plain;base64," + b64_prompt
-    data = {"fn_index": 3,
+    data = {"fn_index": 11,
             "data": ["",
                      prompt.negative_prompt,
+                     "None",
                      "None",
                      prompt.steps,
                      config['SAMPLER'],
                      False,
                      False,
-                     1,
+                     quantity,
                      int(config['BATCH_SIZE']),
                      int(config["CFG_SCALE"]),
                      prompt.seed,
@@ -112,18 +120,24 @@ def generate_txt_to_img(prompt: Prompt) -> [ImageData]:
                      0,
                      0,
                      0,
+                     False,
                      prompt.width,
                      prompt.height,
-                     "Prompts from file",
-                     {'name': "file.txt", "size": len(prompt_list_text) + len(prompt_list) - 1, "data": b64_prompt},
                      False,
+                     False,
+                     0.7,
+                     "Prompts from file or textbox",
+                     False,
+                     False,
+                     {'name': "file.txt", "size": len(prompt_list_text) + len(prompt_list) - 1, "data": b64_prompt},
+                     "",
                      "Seed",
                      "",
                      "Steps",
                      "",
-                     [],
-                     "",
-                     ""],
+                     True,
+                     False,
+                     None],
             "session_hash": "aaa"}
 
     r = requests.post("http://localhost:7860/api/predict/", json=data)
@@ -135,7 +149,7 @@ def generate_img_to_txt(image_data: ImageData, prompt=None) -> str:
     config = dotenv_values('.env')
     openai.api_key = config['OPENAI_API_KEY']
 
-    data = {"fn_index": 14,
+    data = {"fn_index": 30,
             "data": [image_data.data],
             "session_hash": "aaa"}
     r = requests.post("http://localhost:7860/api/predict/", json=data)
