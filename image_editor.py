@@ -189,7 +189,7 @@ def generate_img_to_txt(image_data: ImageData, prompt=None) -> str:
             else:
                 choice = f"""The following is a description of an image: '{caption}'
 
-                {prompt.prompt}
+                {prompt}
 
                 """
 
