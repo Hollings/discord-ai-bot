@@ -44,6 +44,7 @@ async def on_message(message: discord.Message):
     # send help message
     if message.content == "!help":
         await message.channel.send(config["HELP_MESSAGE"])
+        return
 
     prompt = Prompt(prompts=[message.content], channel_id=message.channel.id, message_id=message.id)
 
