@@ -78,6 +78,7 @@ class Prompt(Model):
                 self.seed = int(num_string)
             current_char += 1
 
+        self.quantity = min(self.quantity, 5)
         self.prompts = [prompt[current_char:]] * self.quantity
 
         # append the tags to the prompt
