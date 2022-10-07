@@ -69,12 +69,14 @@ async def on_message(message: discord.Message):
 
 @client.event
 async def on_reaction_add(reaction: discord.Reaction, user: discord.User):
+    # we only care about reactions added by users on bot messages
     if (user == client.user) or len(reaction.message.reactions) > 1 or reaction.message.author != client.user:
-        print(reaction.message.reactions)
         return
 
+    # if there are already reactions on the message, ignore
     if sum([reaction.count for reaction in reaction.message.reactions]) > 1:
         return
+
     # get link of attachment
     link = reaction.message.attachments[0].url if len(reaction.message.attachments) >= 1 else ""
     # get channel by id
