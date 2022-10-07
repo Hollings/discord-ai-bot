@@ -69,7 +69,11 @@ async def on_message(message: discord.Message):
 
 @client.event
 async def on_reaction_add(reaction: discord.Reaction, user: discord.User):
-    if (user == client.user) or len(reaction.message.reactions) > 1:
+    if (user == client.user) or len(reaction.message.reactions) > 1 or reaction.message.author != client.user:
+        print(reaction.message.reactions)
+        return
+
+    if sum([reaction.count for reaction in reaction.message.reactions]) > 1:
         return
     # get link of attachment
     link = reaction.message.attachments[0].url if len(reaction.message.attachments) >= 1 else ""
