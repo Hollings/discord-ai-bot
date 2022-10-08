@@ -40,7 +40,10 @@ def do_prompt(prompt: Prompt, message):
         for i, image_data in enumerate(image_data_list):
             image_data.upscale()
             if prompt.apply_caption:
-                image_data.add_caption_to_image(prompts[i], f"Seed: {prompt.seed}")
+                try:
+                    image_data.add_caption_to_image(prompts[i], f"Seed: {prompt.seed}")
+                except:
+                    pass
             # sending one image at a time, but we'll just save any one of the messages to log to the prompt db
             files.append(image_data.encode_to_discord_file())
             prompt.seed += 1
