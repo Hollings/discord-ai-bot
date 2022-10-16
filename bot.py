@@ -137,8 +137,9 @@ async def download_attachments_from_message(message: discord.Message) -> list[Im
 
 
 init_db(reset=False)
-subprocess.Popen("webui.bat", cwd=config['WEB_UI_BATCH'], shell=True)
-print("Starting the generator script")
+print("Starting the web UI...")
+subprocess.Popen("webui.bat", cwd=config['WEB_UI_DIR'], shell=True)
+print("Starting the generator script...")
 subprocess.Popen(["./venv/Scripts/python", "bot-generator.py"])
-print("Starting the Discord bot")
+print("Starting the Discord bot...")
 client.run(config['DISCORD_TOKEN'])
