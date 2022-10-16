@@ -61,11 +61,11 @@ async def on_message(message: discord.Message):
             else:
                 global_config.value = "😴"
             global_config.save()
-            await client.change_presence(activity=discord.Game(name="Sleeping"))
+            await client.change_presence(activity=discord.Game(name="Sleeping"), status=discord.Status.idle)
             return
 
         if message.content.startswith("!on"):
-            await client.change_presence(activity=discord.Game(name="Stable Diffusion"))
+            await client.change_presence(activity=discord.Game(name="Stable Diffusion"), status=discord.Status.online)
             global_config.value = None
             global_config.save()
             return
