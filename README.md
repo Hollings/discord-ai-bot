@@ -1,4 +1,4 @@
-**This repo is a personal project that I'm using for fun, is a rough work in progress, and is not guaranteed to work. I
+**This repo is a personal project that I'm creating for fun, is a rough work in progress, and is not guaranteed to work. I
 use this for my own personal server, and anything I push to the repo "works on my machine".**
 
 **If you have any issues, message me on Discord `Hollings#6943` or Twitter `hollingsfsdf` and I'll do my best to help**
