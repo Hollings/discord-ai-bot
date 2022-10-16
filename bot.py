@@ -1,6 +1,7 @@
 import base64
 import json
 import random
+import subprocess
 from random import randint
 
 import discord
@@ -10,6 +11,7 @@ from peewee import *
 
 from image_editor import ImageData
 from models.channel_config import ChannelConfig
+from models.global_config import GlobalConfig
 from models.prompt import Prompt
 from models.user_setting import UserSetting
 
@@ -20,12 +22,13 @@ db = SqliteDatabase('bot.db')
 config = dotenv_values('.env')
 
 
-def init_db(migrate: bool = False):
+def init_db(reset: bool = False):
     db.connect()
 
-    if migrate:
-        db.drop_tables([Prompt, UserSetting, ChannelConfig])
-        db.create_tables([Prompt, UserSetting, ChannelConfig])
+    if reset:
+        db.drop_tables([Prompt, UserSetting, ChannelConfig, GlobalConfig])
+
+    db.create_tables([Prompt, UserSetting, ChannelConfig, GlobalConfig])
 
 @client.event
 async def on_ready():
@@ -47,6 +50,22 @@ async def on_message(message: discord.Message):
         await message.channel.send(config["HELP_MESSAGE"])
         return
 
+    # admin can turn on and off generation and give an emoji for the bot to react to messages with
+    global_config = GlobalConfig.get(GlobalConfig.setting == "generation_disabled")
+    if message.author.id == int(config["ADMIN_USER_ID"]):
+        if message.content.startswith("!off"):
+            if " " in message:
+                global_config.value = message.content.split(" ")[1]
+            else:
+                global_config.value = "😴"
+            global_config.save()
+            return
+
+        if message.content.startswith("!on"):
+            global_config.value = None
+            global_config.save()
+            return
+
     prompt = Prompt(prompts=[message.content], channel_id=message.channel.id, message_id=message.id)
 
     if len(message.attachments) >= 1:
@@ -64,6 +83,11 @@ async def on_message(message: discord.Message):
         prompt.seed = random.randint(0, 1000)
     prompt.save()
     await message.add_reaction("😶")
+    if global_config.value is not None:
+        try:
+            await message.add_reaction(global_config.value)
+        except:
+            await message.add_reaction("😴")
     try:
         requests.get("http://localhost:7860/")
     except:
@@ -108,5 +132,9 @@ async def download_attachments_from_message(message: discord.Message) -> list[Im
     return prompt_files
 
 
-init_db(migrate=False)
+init_db(reset=False)
+subprocess.Popen("webui.bat", cwd=config['WEB_UI_BATCH'], shell=True)
+print("Starting the generator script")
+subprocess.Popen(["./venv/Scripts/python", "bot-generator.py"])
+print("Starting the Discord bot")
 client.run(config['DISCORD_TOKEN'])

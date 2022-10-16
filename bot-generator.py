@@ -9,6 +9,7 @@ from dotenv import dotenv_values
 from peewee import *
 
 from image_editor import generate_txt_to_img, generate_img_to_txt, ImageData
+from models.global_config import GlobalConfig
 from models.prompt import Prompt
 
 db = SqliteDatabase('bot.db')
@@ -58,6 +59,12 @@ class Client(discord.Client):
         client.loop.create_task(client.check_and_generate(), name="check_and_generate")
 
     async def check_and_generate(self):
+
+        global_config = GlobalConfig.get(GlobalConfig.setting == "generation_disabled")
+        while global_config.value is not None:
+            global_config = GlobalConfig.get(GlobalConfig.setting == "generation_disabled")
+            await asyncio.sleep(2)
+
         seen = []
         prompt = get_oldest_queued_prompt()
         if prompt and prompt not in seen:
@@ -110,15 +117,13 @@ class Client(discord.Client):
         print(args)
         print(kwargs)
 
-
 def wait_for_api():
-    print("Waiting for webui to start...", end="")
     while True:
         try:
             requests.get("http://localhost:7860/")
             break
         except:
-            print(".", end="")
+            print("Waiting for Web UI to start...")
             time.sleep(5)
 
 
@@ -126,3 +131,4 @@ wait_for_api()
 logging.basicConfig(level=logging.ERROR)
 client = Client()
 client.run(config['DISCORD_TOKEN'])
+
