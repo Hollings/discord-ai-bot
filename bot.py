@@ -56,7 +56,7 @@ async def on_message(message: discord.Message):
     global_config = GlobalConfig.get(GlobalConfig.setting == "generation_disabled")
     if message.author.id == int(config["ADMIN_USER_ID"]):
         if message.content.startswith("!off"):
-            if " " in message:
+            if " " in message.content:
                 global_config.value = message.content.split(" ")[1]
             else:
                 global_config.value = "😴"
