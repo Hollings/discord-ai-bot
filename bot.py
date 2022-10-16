@@ -22,9 +22,10 @@ config = dotenv_values('.env')
 
 def init_db(migrate: bool = False):
     db.connect()
+
     if migrate:
-        db.drop_tables([Prompt, UserSetting])
-        db.create_tables([Prompt, UserSetting])
+        db.drop_tables([Prompt, UserSetting, ChannelConfig])
+        db.create_tables([Prompt, UserSetting, ChannelConfig])
 
 @client.event
 async def on_ready():
@@ -49,6 +50,9 @@ async def on_message(message: discord.Message):
     prompt = Prompt(prompts=[message.content], channel_id=message.channel.id, message_id=message.id)
 
     if len(message.attachments) >= 1:
+        if not config['OPENAI_API_KEY']:
+            # CLIP/GPT3 support is not enabled, so we can't do anything with uploaded images
+            return
         files = await download_attachments_from_message(message)
         prompt.image_paths = json.dumps([file.data for file in files])
     elif not message.content.startswith("!"):
@@ -69,6 +73,10 @@ async def on_message(message: discord.Message):
 
 @client.event
 async def on_reaction_add(reaction: discord.Reaction, user: discord.User):
+    # Add reacted images to the starboard channel
+    if not config['STARBOARD_CHANNEL_ID']:
+        return
+
     # we only care about reactions added by users on bot messages
     if (user == client.user) or len(reaction.message.reactions) > 1 or reaction.message.author != client.user:
         return
@@ -80,7 +88,7 @@ async def on_reaction_add(reaction: discord.Reaction, user: discord.User):
     # get link of attachment
     link = reaction.message.attachments[0].url if len(reaction.message.attachments) >= 1 else ""
     # get channel by id
-    channel = client.get_channel(1026644569602924555)
+    channel = client.get_channel(int(config['STARBOARD_CHANNEL_ID']))
     if channel.guild != reaction.message.guild:
         return
     # send message with link

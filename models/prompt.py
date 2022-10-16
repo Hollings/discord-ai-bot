@@ -47,7 +47,12 @@ class Prompt(Model):
         with open('config/tags.json') as tags_file:
             tags = json.load(tags_file)
 
-        while current_char < len(str(prompt)) and prompt[current_char] in "!?+#^$.%{":
+        if "^" in prompt or "<" in prompt:
+            self.height, self.width = 768, 768
+        if "^" in prompt and "<" in prompt:
+            self.height, self.width = 512, 512
+
+        while current_char < len(str(prompt)) and prompt[current_char] in "!?+#^$.%{^<":
             if prompt[current_char] == "!":
                 self.quantity += 1
             if prompt[current_char] == "?":
@@ -59,13 +64,16 @@ class Prompt(Model):
                 add_artist = random() > 0.5
             if prompt[current_char] == "#":
                 self.quantity += 5
-            if prompt[current_char] == "^":
-                self.quantity = 1
-                self.steps = round(self.steps / 2)
             if prompt[current_char] == ".":
                 self.apply_caption = False
             if prompt[current_char] == "%":
                 self.seed = 69420
+            if prompt[current_char] == "^":
+                self.height += 256
+                self.width -= 256
+            if prompt[current_char] == "<":
+                self.height -= 256
+                self.width += 256
             if prompt[current_char] == "{" and "}" in prompt[current_char + 1:]:
                 num_string = ""
                 current_char += 1

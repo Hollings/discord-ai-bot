@@ -44,7 +44,6 @@ def do_prompt(prompt: Prompt, message):
                     image_data.add_caption_to_image(prompts[i], f"Seed: {prompt.seed}")
                 except:
                     pass
-            # sending one image at a time, but we'll just save any one of the messages to log to the prompt db
             files.append(image_data.encode_to_discord_file())
             prompt.seed += 1
     else:
@@ -56,7 +55,7 @@ def do_prompt(prompt: Prompt, message):
 class Client(discord.Client):
     async def on_ready(self):
         print('Logged on as', self.user)
-        client.loop.create_task(client.check_and_generate())
+        client.loop.create_task(client.check_and_generate(), name="check_and_generate")
 
     async def check_and_generate(self):
         seen = []
@@ -65,6 +64,7 @@ class Client(discord.Client):
             seen.append(prompt)
             print("getting prompt")
             channel = client.get_channel(prompt.channel_id)
+            # debug_channel = client.get_channel(config['DEBUG_CHANNEL_ID'])
             message = await channel.fetch_message(prompt.message_id)
 
             await message.add_reaction("🤔")
@@ -75,15 +75,33 @@ class Client(discord.Client):
                 # Send each file in its own message instead of a single message with multiple files
                 # To make it easier for people to reply/react to a single one
                 input_coroutines = [channel.send(file=file) for file in files]
-                res = await asyncio.gather(*input_coroutines, return_exceptions=True)
-            for description in descriptions:
-                output_message = await asyncio.wait_for(channel.send(description, reference=message), timeout=60.0)
+                print("sending files for prompt " + prompt.prompts)
+                res = await asyncio.gather(*input_coroutines, return_exceptions=False)
+                print("sent files")
 
+            for description in descriptions:
+                try:
+                    output_message = await asyncio.wait_for(channel.send(description, reference=message), timeout=60.0)
+                except:
+                    pass
             dequeue_prompt(prompt)
             await message.clear_reactions()
             await message.add_reaction("✅")
             print("finished prompt")
-            time.sleep(10)
+
+        running_tasks = [task for task in asyncio.all_tasks() if not task.done()]
+        # group tasks by name
+        task_names = {}
+        for task in running_tasks:
+            task_coro_name = task.get_coro().__name__
+            if task_coro_name not in task_names:
+                task_names[task_coro_name] = []
+            task_names[task_coro_name].append(task)
+
+        if "check_and_generate" in task_names and len(task_names["check_and_generate"]) > 1:
+            print("Too many tasks running, cancelling")
+            return
+        await asyncio.sleep(2)
         client.loop.create_task(client.check_and_generate())
 
     async def on_error(self, event_method, *args, **kwargs):
@@ -93,16 +111,18 @@ class Client(discord.Client):
         print(kwargs)
 
 
-print("Waiting for webui to start...", end="")
-while True:
-    try:
-        requests.get("http://localhost:7860/")
-        break
-    except:
-        print(".", end="")
-        time.sleep(5)
+def wait_for_api():
+    print("Waiting for webui to start...", end="")
+    while True:
+        try:
+            requests.get("http://localhost:7860/")
+            break
+        except:
+            print(".", end="")
+            time.sleep(5)
 
+
+wait_for_api()
 logging.basicConfig(level=logging.ERROR)
-
 client = Client()
 client.run(config['DISCORD_TOKEN'])
