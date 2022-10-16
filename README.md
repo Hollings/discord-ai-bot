@@ -22,8 +22,6 @@ images on demand.
 - Create and invite your discord bot to a server (https://discord.com/developers/applications/)
 - (optional, allows the bot to describe uploaded images) Create an OpenAI account and generate an API
   key (https://beta.openai.com/account/api-keys)
-- rename `.env.example` to `.env` and update values with your OpenAI and Discord API keys
-- run `bot.py` (first time running, modify init_db() with `init_db(migrate=True)`to create the database)
-- run `bot-generator.py`
-- run AUTOMATIC1111's web UI
-- **Alternatively, run `run.bat` to run all three scripts in one window**
+- rename `.env.example` to `.env` and update values with the appropriate values
+- run `bot.py`
+

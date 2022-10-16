@@ -43,8 +43,8 @@ async def on_message(message: discord.Message):
     if message.author == client.user:
         return
 
-    # ignore messages from channels not in channelconfig
-    if not ChannelConfig.select().where(ChannelConfig.channel_id == message.channel.id).exists():
+    # ignore messages from channels not in channelconfig or disabled
+    if not ChannelConfig.select().where(ChannelConfig.channel_id == message.channel.id, ChannelConfig.enabled).exists():
         return
 
     # send help message
