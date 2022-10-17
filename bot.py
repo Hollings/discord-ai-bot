@@ -15,7 +15,8 @@ from models.global_config import GlobalConfig
 from models.prompt import Prompt
 from models.user_setting import UserSetting
 
-client = discord.Client()
+client = discord.Client(intents=discord.Intents.default())
+
 db = SqliteDatabase('bot.db')
 
 # load env variables
