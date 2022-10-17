@@ -15,7 +15,12 @@ from models.global_config import GlobalConfig
 from models.prompt import Prompt
 from models.user_setting import UserSetting
 
-client = discord.Client(intents=discord.Intents.default())
+intents = discord.Intents.default()
+intents.messages = True
+intents.guilds = True
+intents.reactions = True
+intents.message_content = True
+client = discord.Client(intents=intents)
 
 db = SqliteDatabase('bot.db')
 
@@ -35,11 +40,12 @@ def init_db(reset: bool = False):
 
 @client.event
 async def on_ready():
-    print('We have logged in as {0.user}'.format(client))
+    print('bot.py - We have logged in as {0.user}'.format(client))
 
 
 @client.event
 async def on_message(message: discord.Message):
+    print("Message received" + message.content)
     # ignore messages from self
     if message.author == client.user:
         return

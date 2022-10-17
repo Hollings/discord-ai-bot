@@ -129,6 +129,10 @@ def wait_for_api():
 
 wait_for_api()
 logging.basicConfig(level=logging.ERROR)
-client = Client(intents=discord.Intents.default())
+intents = discord.Intents.default()
+intents.messages = True
+intents.guilds = True
+intents.reactions = True
+intents.message_content = True
+client = Client(intents=intents)
 client.run(config['DISCORD_TOKEN'])
-
