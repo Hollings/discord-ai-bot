@@ -26,6 +26,7 @@ images on demand.
     - **Note** - the A1111 repo gets updated very frequently and new versions may break compatibility with this bot. The
       current commit that the bot has been tested on is `c8045c5ad4f99deb3a19add06e0457de1df62b05`
 - Create and invite your discord bot to a server (https://discord.com/developers/applications/)
+  - The bot is required to have `MESSAGE CONTENT INTENT` enabled in the Discord Developer Portal
 - **Optional** Create an OpenAI account and generate an API key (https://beta.openai.com/account/api-keys)
 - Rename `.env.example` to `.env` and update values with the appropriate values
 - Install dependencies with `pip install -r requirements.txt`
