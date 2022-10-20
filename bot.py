@@ -1,5 +1,6 @@
 import base64
 import json
+import os
 import random
 import subprocess
 from random import randint
@@ -40,28 +41,29 @@ def init_db(reset: bool = False):
 
 @client.event
 async def on_ready():
-    print('bot.py - We have logged in as {0.user}'.format(client))
+    print('bot.py logged in as {0.user}'.format(client))
 
 
 @client.event
 async def on_message(message: discord.Message):
-    print("Message received" + message.content)
     # ignore messages from self
     if message.author == client.user:
-        return
-
-    # ignore messages from channels not in channelconfig or disabled
-    if not ChannelConfig.select().where(ChannelConfig.channel_id == message.channel.id, ChannelConfig.enabled).exists():
-        return
-
-    # send help message
-    if message.content == "!help":
-        await message.channel.send(config["HELP_MESSAGE"])
         return
 
     # admin can turn on and off generation and give an emoji for the bot to react to messages with
     global_config = GlobalConfig.get(GlobalConfig.setting == "generation_disabled")
     if message.author.id == int(config["ADMIN_USER_ID"]):
+        if message.content == "!add":
+            # create channelconfig for this channel
+            ChannelConfig.get_or_create(channel_id=message.channel.id, defaults={"enabled": True})
+            await message.add_reaction("✅")
+            return
+        if message.content == "!remove":
+            # delete channelconfig for this channel
+            ChannelConfig.delete().where(ChannelConfig.channel_id == message.channel.id).execute()
+            await message.add_reaction("✅")
+            return
+
         if message.content.startswith("!off"):
             if " " in message.content:
                 global_config.value = message.content.split(" ")[1]
@@ -72,10 +74,29 @@ async def on_message(message: discord.Message):
             return
 
         if message.content.startswith("!on"):
-            await client.change_presence(activity=discord.Game(name="Stable Diffusion"), status=discord.Status.online)
+            await client.change_presence(activity=discord.Game(name="Stable Diffusion"),
+                                         status=discord.Status.online)
             global_config.value = None
             global_config.save()
             return
+
+    # ignore messages from channels not in channelconfig or disabled
+    if not ChannelConfig.select().where(ChannelConfig.channel_id == message.channel.id, ChannelConfig.enabled).exists():
+        return
+
+    # send help message
+    if message.content == "!help":
+        # get .bin filenames in models directory
+        loaded_textual_inversions = [f for f in os.listdir(config['WEB_UI_DIR']+"/embeddings") if f.endswith(".bin")]
+
+        help_message = config['HELP_MESSAGE']
+        if loaded_textual_inversions:
+            help_message+="\n\n" + "Available Textual Inversions embeddings: " + ", ".join([f"`{x.replace('.bin','')}`" for x in loaded_textual_inversions])
+
+        await message.channel.send()
+        return
+
+
 
     prompt = Prompt(prompts=[message.content], channel_id=message.channel.id, message_id=message.id)
 

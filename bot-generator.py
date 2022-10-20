@@ -55,7 +55,7 @@ def do_prompt(prompt: Prompt, message):
 
 class Client(discord.Client):
     async def on_ready(self):
-        print('Logged on as', self.user)
+        print('bot-generator.py logged on as', self.user)
         client.loop.create_task(client.check_and_generate(), name="check_and_generate")
 
     async def check_and_generate(self):
@@ -108,7 +108,9 @@ class Client(discord.Client):
         if "check_and_generate" in task_names and len(task_names["check_and_generate"]) > 1:
             print("Too many tasks running, cancelling")
             return
+
         await asyncio.sleep(2)
+
         client.loop.create_task(client.check_and_generate())
 
     async def on_error(self, event_method, *args, **kwargs):

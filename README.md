@@ -44,4 +44,4 @@ images on demand.
 - Check that your bot has been invited to your server with enough permissions to read and send messages, images, and
   reactions.
 
-- Check that your channel ID is added to the channel_config DB table.
+- Check that your channel ID is added to the channelconfig DB table.
