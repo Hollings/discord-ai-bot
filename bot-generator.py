@@ -32,23 +32,23 @@ def do_prompt(prompt: Prompt, message):
     print("======")
     image_paths = json.loads(prompt.image_paths)
     output_message = None
-    prompts = json.loads(prompt.prompts)
-    print("Generating prompt: " + prompts[0])
+    print("Generating prompt: " + prompt.prompts)
     files = []
     images_description_list = []
     if not image_paths:
         image_data_list = generate_txt_to_img(prompt)
         for i, image_data in enumerate(image_data_list):
-            image_data.upscale()
+            # image_data.upscale()
             if prompt.apply_caption:
                 try:
-                    image_data.add_caption_to_image(prompts[i], f"Seed: {prompt.seed}")
-                except:
+                    image_data.add_caption_to_image(prompt.prompts, f"Seed: {prompt.seed}")
+                except Exception as e:
+                    print("Failed to add caption to image" + str(e))
                     pass
             files.append(image_data.encode_to_discord_file())
             prompt.seed += 1
     else:
-        images_description_list = [generate_img_to_txt(ImageData(image), prompts[0]) for image in image_paths]
+        images_description_list = [generate_img_to_txt(ImageData(image), prompt) for image in image_paths]
 
     return files, images_description_list
 
@@ -92,7 +92,10 @@ class Client(discord.Client):
                 except:
                     pass
             dequeue_prompt(prompt)
-            await message.clear_reactions()
+            try:
+                await message.clear_reactions()
+            except:
+                pass
             await message.add_reaction("✅")
             print("finished prompt")
 

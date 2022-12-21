@@ -3,6 +3,7 @@ import json
 import os
 import random
 import subprocess
+import time
 from random import randint
 
 import discord
@@ -84,33 +85,32 @@ async def on_message(message: discord.Message):
     if not ChannelConfig.select().where(ChannelConfig.channel_id == message.channel.id, ChannelConfig.enabled).exists():
         return
 
-    # send help message
-    if message.content == "!help":
-        # get .bin filenames in models directory
-        loaded_textual_inversions = [f for f in os.listdir(config['WEB_UI_DIR']+"/embeddings") if f.endswith(".bin")]
+    # # send help message
+    # if message.content == "!help":
+    #     # get .bin filenames in models directory
+    #     loaded_textual_inversions = [f for f in os.listdir(config['WEB_UI_DIR']+"/embeddings") if f.endswith(".bin")]
+    #
+    #     help_message = config['HELP_MESSAGE']
+    #     if loaded_textual_inversions:
+    #         help_message+="\n\n" + "Available Textual Inversions embeddings: " + ", ".join([f"`{x.replace('.bin','')}`" for x in loaded_textual_inversions])
+    #
+    #     await message.channel.send()
+    #     return
 
-        help_message = config['HELP_MESSAGE']
-        if loaded_textual_inversions:
-            help_message+="\n\n" + "Available Textual Inversions embeddings: " + ", ".join([f"`{x.replace('.bin','')}`" for x in loaded_textual_inversions])
-
-        await message.channel.send()
+    if not message.content.startswith("!"):
         return
 
+    prompt = Prompt(prompts=message.content, channel_id=message.channel.id, message_id=message.id)
 
-
-    prompt = Prompt(prompts=[message.content], channel_id=message.channel.id, message_id=message.id)
-
-    if len(message.attachments) >= 1:
-        if not config['OPENAI_API_KEY']:
-            # CLIP/GPT3 support is not enabled, so we can't do anything with uploaded images
-            return
-        files = await download_attachments_from_message(message)
-        prompt.image_paths = json.dumps([file.data for file in files])
-    elif not message.content.startswith("!"):
-        return
+    # if len(message.attachments) >= 1:
+    #     if not config['OPENAI_API_KEY']:
+    #         # CLIP/GPT3 support is not enabled, so we can't do anything with uploaded images
+    #         return
+    #     files = await download_attachments_from_message(message)
+    #     prompt.image_paths = json.dumps([file.data for file in files])
+    # el
 
     prompt.apply_modifiers()
-
     if prompt.seed == -1:
         prompt.seed = random.randint(0, 1000)
     prompt.save()
@@ -134,7 +134,7 @@ async def on_reaction_add(reaction: discord.Reaction, user: discord.User):
         return
 
     # we only care about reactions added by users on bot messages
-    if (user == client.user) or len(reaction.message.reactions) > 1 or reaction.message.author != client.user:
+    if len(reaction.message.reactions) > 1 or reaction.message.author != client.user:
         return
 
     # if there are already reactions on the message, ignore
@@ -143,6 +143,14 @@ async def on_reaction_add(reaction: discord.Reaction, user: discord.User):
 
     # get link of attachment
     link = reaction.message.attachments[0].url if len(reaction.message.attachments) >= 1 else ""
+    # Get the text of the message
+
+    if not link:
+        text = reaction.message.content
+        # Get the name of the user who added the reaction
+        user_name = reaction.message.author.name
+        link = f"> **{user_name}**: {text}"
+
     # get channel by id
     channel = client.get_channel(int(config['STARBOARD_CHANNEL_ID']))
     if channel.guild != reaction.message.guild:

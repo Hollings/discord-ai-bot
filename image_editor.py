@@ -100,67 +100,25 @@ class ImageData():
 
 def generate_txt_to_img(prompt: Prompt) -> [ImageData]:
     config = dotenv_values('.env')
-
-    prompt_list = json.loads(prompt.prompts)
-    prompt_list_text = "\n".join(prompt_list)
-    # if every prompt is the same
-    if len(set(prompt_list)) == 1:
-        prompt_list_text = prompt_list[0]
-        quantity = len(prompt_list)
-    else:
-        quantity = 1
-    b64_prompt = base64.b64encode(prompt_list_text.encode()).decode('utf-8')
-    b64_prompt = "data:text/plain;base64," + b64_prompt
-    data = {"fn_index": 13,
-            "data": ["",
-                     prompt.negative_prompt,
-                     "None",
-                     "None",
-                     prompt.steps,
-                     config['SAMPLER'],
-                     False,
-                     False,
-                     quantity,
-                     int(config['BATCH_SIZE']),
-                     int(config["CFG_SCALE"]),
-                     prompt.seed,
-                     -1,
-                     0,
-                     0,
-                     0,
-                     False,
-                     prompt.height,
-                     prompt.width,
-                     False,
-                     0.7,
-                     0,
-                     0,
-                     "Prompts from file or textbox",
-                     False,
-                     False,
-                     {'name': "file.txt", "size": len(prompt_list_text) + len(prompt_list) - 1, "data": b64_prompt},
-                     "",
-                     "Seed",
-                     "",
-                     "Nothing",
-                     "",
-                     True,
-                     False,
-                     False,
-                     None,
-                     None,
-                     None],
-            "session_hash": "aaa"}
-
-    r = requests.post("http://localhost:7860/api/predict/", json=data)
-    files = r.json()["data"][0]
+    data = {
+        "prompt": prompt.prompts,
+        "seed": prompt.seed,
+        "n_iter": prompt.quantity,
+        "steps": prompt.steps,
+        "height": prompt.height,
+        "width": prompt.width,
+        "negative_prompt": prompt.negative_prompt,
+        "sampler_name": config['SAMPLER'],
+        "batch_size": int(config['BATCH_SIZE']),
+        "cfg_scale": int(config["CFG_SCALE"]),
+    }
+    r = requests.post("http://127.0.0.1:7860/sdapi/v1/txt2img", json=data)
+    files = r.json()["images"]
     # convert each file int b64
     encoded_images = []
     for file in files:
-        with open(file['name'], "rb") as image_file:
-            encoded_images.append("data:image/png;base64," + base64.b64encode(image_file.read()).decode('utf-8'))
+        encoded_images.append("data:image/png;base64," + file)
     return [ImageData(encoded_image) for encoded_image in encoded_images]
-
 
 def generate_img_to_txt(image_data: ImageData, prompt=None) -> str:
     config = dotenv_values('.env')

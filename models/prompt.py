@@ -19,9 +19,9 @@ class Prompt(Model):
     negative_prompt = TextField(default="")
     apply_caption = BooleanField(default=True)
     status = TextField(default="pending")
-    steps = IntegerField(default=40)
-    height = IntegerField(default=512)
-    width = IntegerField(default=512)
+    steps = IntegerField(default=30)
+    height = IntegerField(default=768)
+    width = IntegerField(default=768)
 
     def __repr__(self):
         return self.prompts
@@ -36,21 +36,18 @@ class Prompt(Model):
         current_char = 1
         added_tags = []
         add_artist = False
-        prompt = self.prompts[0]
+        prompt = self.prompts
         add_random_tags = 0
         add_quality_tags = 0
 
         if "|" in prompt:
-            prompt, self.negative_prompt = str(self.prompts).split("|", 1)
+            # if "|" is not in between [], it's a modifier
+            if not ("[" in prompt and "]" in prompt and prompt.index("[") < prompt.index("|") < prompt.index("]")):
+                prompt, self.negative_prompt = str(self.prompts).split("|", 1)
 
         # load tags.json
         with open('config/tags.json') as tags_file:
             tags = json.load(tags_file)
-
-        if "^" in prompt or "<" in prompt:
-            self.height, self.width = 768, 768
-        if "^" in prompt and "<" in prompt:
-            self.height, self.width = 512, 512
 
         while current_char < len(str(prompt)) and prompt[current_char] in "!?+#^$.%{^<":
             if prompt[current_char] == "!":
@@ -59,9 +56,6 @@ class Prompt(Model):
                 add_random_tags += 1
             if prompt[current_char] == "+":
                 self.steps = 75
-                add_quality_tags += 1
-                # add a random artist tag 50% of the time at the end
-                add_artist = random() > 0.5
             if prompt[current_char] == "#":
                 self.quantity += 5
             if prompt[current_char] == ".":
@@ -69,11 +63,11 @@ class Prompt(Model):
             if prompt[current_char] == "%":
                 self.seed = 69420
             if prompt[current_char] == "^":
-                self.height += 256
-                self.width -= 256
+                self.height += 128
+                self.width -= 128
             if prompt[current_char] == "<":
-                self.height -= 256
-                self.width += 256
+                self.height -= 128
+                self.width += 128
             if prompt[current_char] == "{" and "}" in prompt[current_char + 1:]:
                 num_string = ""
                 current_char += 1
@@ -87,21 +81,19 @@ class Prompt(Model):
             current_char += 1
 
         self.quantity = min(self.quantity, 5)
-        self.prompts = [prompt[current_char:]] * self.quantity
+        prompt = prompt[current_char:]
 
         # append the tags to the prompt
-        for i, prompt in enumerate(self.prompts):
-            added_tags = []
-            if add_quality_tags:
-                added_tags.append(sample(tags['quality'], randint(2, 5)))
-            if add_random_tags:
-                added_tags.append(sample(tags['random'], randint(1, 3)))
-            if add_artist:
-                added_tags.append(sample(tags['artist'], 1))
-            if added_tags:
-                prompt += " - " + " ".join([", ".join(tag) for tag in added_tags])
-            self.prompts[i] = prompt
-        self.prompts = json.dumps(self.prompts)
+        added_tags = []
+        if add_quality_tags:
+            added_tags.append(sample(tags['quality'], randint(2, 5)))
+        if add_random_tags:
+            added_tags.append(sample(tags['random'], randint(1, 3)))
+        if add_artist:
+            added_tags.append(sample(tags['artist'], 1))
+        if added_tags:
+            prompt += " - " + " ".join([", ".join(tag) for tag in added_tags])
+        self.prompts = prompt
 
     def generate_img_to_txt(self):
         if not self.image_paths:
