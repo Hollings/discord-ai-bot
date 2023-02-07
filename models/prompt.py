@@ -80,6 +80,11 @@ class Prompt(Model):
                 self.seed = int(num_string)
             current_char += 1
 
+        # if height or width is 0, reset it to 768x768
+        if self.height <= 0 or self.width <= 0:
+            self.height = 768
+            self.width = 768
+
         self.quantity = min(self.quantity, 5)
         prompt = prompt[current_char:]
 

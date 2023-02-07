@@ -10,6 +10,7 @@ import discord
 import requests
 from dotenv import dotenv_values
 from peewee import *
+import psutil
 
 from image_editor import ImageData
 from models.channel_config import ChannelConfig
@@ -28,7 +29,7 @@ db = SqliteDatabase('bot.db')
 
 # load env variables
 config = dotenv_values('.env')
-
+webui_process = None
 
 def init_db(reset: bool = False):
     db.connect()
@@ -66,19 +67,34 @@ async def on_message(message: discord.Message):
             return
 
         if message.content.startswith("!off"):
-            if " " in message.content:
-                global_config.value = message.content.split(" ")[1]
-            else:
-                global_config.value = "😴"
-            global_config.save()
+            # I dont think this work
+
+
+
+            # if " " in message.content:
+            #     global_config.value = message.content.split(" ")[1]
+            # else:
+            #     global_config.value = "😴"
+            # global_config.save()
+            # global webui_process
+            # webui_process.terminate()
+
+            # Find the process with the name "webui.bat"
+            for proc in psutil.Process.children():
+                print(proc.name())
+                if proc.name() == "webui.bat":
+                    print("killing webui")
+                    proc.kill()
+                    break
+
             await client.change_presence(activity=discord.Game(name="Sleeping"), status=discord.Status.idle)
             return
 
         if message.content.startswith("!on"):
             await client.change_presence(activity=discord.Game(name="Stable Diffusion"),
                                          status=discord.Status.online)
-            global_config.value = None
-            global_config.save()
+
+            subprocess.Popen("webui.bat", cwd=config['WEB_UI_DIR'], shell=True)
             return
 
     # ignore messages from channels not in channelconfig or disabled
@@ -86,16 +102,10 @@ async def on_message(message: discord.Message):
         return
 
     # # send help message
-    # if message.content == "!help":
-    #     # get .bin filenames in models directory
-    #     loaded_textual_inversions = [f for f in os.listdir(config['WEB_UI_DIR']+"/embeddings") if f.endswith(".bin")]
-    #
-    #     help_message = config['HELP_MESSAGE']
-    #     if loaded_textual_inversions:
-    #         help_message+="\n\n" + "Available Textual Inversions embeddings: " + ", ".join([f"`{x.replace('.bin','')}`" for x in loaded_textual_inversions])
-    #
-    #     await message.channel.send()
-    #     return
+    if message.content == "!help":
+        help_message = config['HELP_MESSAGE']
+        await message.channel.send(help_message)
+        return
 
     if not message.content.startswith("!"):
         return
@@ -131,6 +141,10 @@ async def on_message(message: discord.Message):
 async def on_reaction_add(reaction: discord.Reaction, user: discord.User):
     # Add reacted images to the starboard channel
     if not config['STARBOARD_CHANNEL_ID']:
+        return
+
+    # ignore reactions from some random channels
+    if reaction.message.channel.id in [1071835365729648690, 1022951067593494589]:
         return
 
     # we only care about reactions added by users on bot messages
@@ -174,7 +188,7 @@ async def download_attachments_from_message(message: discord.Message) -> list[Im
 
 init_db(reset=False)
 print("Starting the web UI...")
-subprocess.Popen("webui.bat", cwd=config['WEB_UI_DIR'], shell=True)
+# webui_process = subprocess.Popen("webui.bat", cwd=config['WEB_UI_DIR'], shell=True)
 print("Starting the generator script...")
 subprocess.Popen(["./venv/Scripts/python", "bot-generator.py"])
 print("Starting the Discord bot...")

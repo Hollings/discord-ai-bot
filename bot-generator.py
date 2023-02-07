@@ -18,7 +18,14 @@ db = SqliteDatabase('bot.db')
 config = dotenv_values('.env')
 
 
-def get_oldest_queued_prompt() -> Prompt:
+def get_oldest_queued_prompt(print_queue=False) -> Prompt:
+    if print_queue:
+        queued = Prompt.select().where(Prompt.status == "pending").order_by(Prompt.id)
+        if queued:
+            print("Queue:")
+            for prompt in queued:
+                print(prompt.prompts)
+            print("======")
     return Prompt.select().where(Prompt.status == "pending").order_by(Prompt.id).first()
 
 
@@ -29,7 +36,6 @@ def dequeue_prompt(prompt: Prompt, out_message=None):
 
 
 def do_prompt(prompt: Prompt, message):
-    print("======")
     image_paths = json.loads(prompt.image_paths)
     output_message = None
     print("Generating prompt: " + prompt.prompts)
@@ -59,6 +65,8 @@ class Client(discord.Client):
         client.loop.create_task(client.check_and_generate(), name="check_and_generate")
 
     async def check_and_generate(self):
+        # clear terminal
+        print('\n' * 80)  # prints 80 line breaks - this is because my pycharm doesnt like clearing the terminal
 
         global_config = GlobalConfig.get(GlobalConfig.setting == "generation_disabled")
         while global_config.value is not None:
@@ -66,14 +74,19 @@ class Client(discord.Client):
             await asyncio.sleep(2)
 
         seen = []
-        prompt = get_oldest_queued_prompt()
+        prompt = get_oldest_queued_prompt(print_queue=True)
         if prompt and prompt not in seen:
             seen.append(prompt)
-            print("getting prompt")
             channel = client.get_channel(prompt.channel_id)
             # debug_channel = client.get_channel(config['DEBUG_CHANNEL_ID'])
-            message = await channel.fetch_message(prompt.message_id)
-
+            # fetch the original message and check if its deleted
+            try:
+                message = await channel.fetch_message(prompt.message_id)
+            except discord.errors.NotFound:
+                print("Original message not found, skipping...")
+                dequeue_prompt(prompt)
+                client.loop.create_task(client.check_and_generate())
+                return
             await message.add_reaction("🤔")
 
             files, descriptions = do_prompt(prompt, message)
@@ -140,4 +153,5 @@ intents.guilds = True
 intents.reactions = True
 intents.message_content = True
 client = Client(intents=intents)
+discord.utils.setup_logging(level=logging.ERROR)
 client.run(config['DISCORD_TOKEN'])
