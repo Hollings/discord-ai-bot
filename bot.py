@@ -52,6 +52,13 @@ async def on_message(message: discord.Message):
     if message.author == client.user:
         return
 
+    # bracket stuff
+    if message.content == '!tournament':
+        await message.channel.send('https://challonge.com/bestbotpostsrealbracket1')
+
+    if message.content == '!bracket':
+        await message.channel.send('https://challonge.com/bestbotpostsrealbracket1.svg')
+
     # admin can turn on and off generation and give an emoji for the bot to react to messages with
     global_config = GlobalConfig.get(GlobalConfig.setting == "generation_disabled")
     if message.author.id == int(config["ADMIN_USER_ID"]):

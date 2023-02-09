@@ -7,7 +7,7 @@ from dotenv import dotenv_values
 from peewee import *
 import challonge
 from discord.utils import get
-
+import openai
 from models.bracket_image import BracketImage
 
 intents = discord.Intents.default()
@@ -19,10 +19,10 @@ client = discord.Client(intents=intents)
 db = SqliteDatabase('bot.db')
 # load env variables
 config = dotenv_values('.env')
+openai.api_key = config['OPENAI_API_KEY']
 
 async def get_all_images_in_channel():
     # fetch all images in the discord channel
-
     # TODO - only add new images to the db
     images = []
     print("getting all images")
@@ -143,12 +143,20 @@ async def run_match(match, participants, tournament_channel, tournament_id, matc
     new_image.paste(img1, (0, 0))
     new_image.paste(img2, (img1.width + 50, 0))
     # new_image.show()
-    await tournament_channel.send(f"Round {match_number}/{total_matches}: `{player1['name']}` vs `{player2['name']}`")
+    intro_text = f"""You are an extremely energetic esports commentator working at a live tournament where two images go head to head to determine the best one. The current round is:
+
+Round {match_number}/{total_matches}: `{player1['name']}` vs `{player2['name']}
+
+In your commentary, you must add a little bit of quirky commentary about each image, such as a pun. You say, """
+    completion = get_completion(intro_text)
+    # strip quotes from the completion
+    completion = completion.replace('"', '')
+    # await tournament_channel.send(completion)
     # send the image to the tournament channel
     with BytesIO() as image_binary:
         new_image.save(image_binary, 'PNG')
         image_binary.seek(0)
-        new_message = await tournament_channel.send(file=discord.File(fp=image_binary, filename="bracket.png"))
+        new_message = await tournament_channel.send(content=completion, file=discord.File(fp=image_binary, filename="bracket.png"))
     # add reactions to the message
     await new_message.add_reaction("🅰️")
     await new_message.add_reaction("🅱️")
@@ -185,15 +193,42 @@ async def run_match(match, participants, tournament_channel, tournament_id, matc
         winner = player2
         loser = player1
     else:
-        await tournament_channel.send("tie vote, skipping")
-        return
+        completion = get_completion(intro_text + completion + f"""
+            After the votes are cast, the match is a tie! The match will be replayed later. You say, \"""")
 
+        # strip quotes from the completion
+        completion = completion.replace('"', '')
+        await tournament_channel.send(completion)
+        return
     print(winner["name"] + " won against " + loser["name"])
-    await tournament_channel.send(winner["name"] + " won against " + loser["name"])
+    completion = get_completion(intro_text + completion + f"""
+    After the votes are cast, the winner is `{winner['name']}`! You say, \"""")
+
+
+
     # report the winner
     challonge.matches.update(tournament_id, match["id"], winner_id=winner["id"],
                              scores_csv=f"{a_reaction_count}-{b_reaction_count}")
+    # strip quotes from the completion
+    completion = completion.replace('"', '')
+    await tournament_channel.send(completion)
+
+    print("winner reported")
     await asyncio.sleep(10)
+
+def get_completion(text: str, temp= 0.7):
+    try:
+        response = openai.Completion.create(
+            engine="text-davinci-003",
+            prompt=text,
+            max_tokens=100,
+            temperature=temp,
+            echo=False,
+        )['choices'][0]['text']
+    except Exception as e:
+        print(e)
+        return str(e)
+    return response
 
 challonge.set_credentials("Hollingsf", config['CHALLONGE_API_KEY'])
 
