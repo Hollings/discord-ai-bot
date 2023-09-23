@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 import os
 import random
 import subprocess
@@ -12,6 +13,8 @@ from dotenv import dotenv_values
 from peewee import *
 import psutil
 
+import talky
+from eye_detect import detect_and_add_eyes
 from image_editor import ImageData
 from models.channel_config import ChannelConfig
 from models.global_config import GlobalConfig
@@ -30,6 +33,11 @@ db = SqliteDatabase('bot.db')
 # load env variables
 config = dotenv_values('.env')
 webui_process = None
+# # Adjust TTS properties (Optional)
+# tts_engine = pyttsx3.init()
+#
+# tts_engine.setProperty('rate', 300)  # Speed of speech
+# tts_engine.setProperty('volume', 1.0)  # Volume (0.0 to 1.0)
 
 def init_db(reset: bool = False):
     db.connect()
@@ -54,10 +62,17 @@ async def on_message(message: discord.Message):
 
     # bracket stuff
     if message.content == '!tournament':
-        await message.channel.send('https://challonge.com/bestbotpostsrealbracket1')
+        await message.channel.send('https://challonge.com/bestbotpostsrealbracket2')
 
     if message.content == '!bracket':
-        await message.channel.send('https://challonge.com/bestbotpostsrealbracket1.svg')
+        await message.channel.send('https://challonge.com/bestbotpostsrealbracket2.svg')
+
+    if message.content == '!goodpost':
+        # post a random line from good-bot-posts.txt
+        with open("good-bot-posts.txt", "r") as f:
+            lines = f.readlines()
+            await message.channel.send(random.choice(lines))
+        return
 
     # admin can turn on and off generation and give an emoji for the bot to react to messages with
     global_config = GlobalConfig.get(GlobalConfig.setting == "generation_disabled")
@@ -72,11 +87,8 @@ async def on_message(message: discord.Message):
             ChannelConfig.delete().where(ChannelConfig.channel_id == message.channel.id).execute()
             await message.add_reaction("✅")
             return
-
         if message.content.startswith("!off"):
             # I dont think this work
-
-
 
             # if " " in message.content:
             #     global_config.value = message.content.split(" ")[1]
@@ -114,19 +126,43 @@ async def on_message(message: discord.Message):
         await message.channel.send(help_message)
         return
 
-    if not message.content.startswith("!"):
-        return
+    try:
+        message_list = split_sentence(message.content)
+    except:
+        message_list = [message.content]
+    if len(message_list) > 1:
+        seed = randint(0, 1000)
+    else:
+        seed = -1
+    for message_content in message_list:
+        await create_prompt_from_message(global_config, message, message_content, seed=seed)
 
-    prompt = Prompt(prompts=message.content, channel_id=message.channel.id, message_id=message.id)
+def split_sentence(input_string):
+    start_index = input_string.index("<") + 1
+    end_index = input_string.index(">")
+    options_string = input_string[start_index:end_index]
+    options_list = options_string.split(",")
+    sentence = input_string.replace(options_string, "")
+    return [sentence.replace("<>", option.strip()) for option in options_list]
 
-    # if len(message.attachments) >= 1:
-    #     if not config['OPENAI_API_KEY']:
-    #         # CLIP/GPT3 support is not enabled, so we can't do anything with uploaded images
-    #         return
-    #     files = await download_attachments_from_message(message)
-    #     prompt.image_paths = json.dumps([file.data for file in files])
-    # el
-
+async def create_prompt_from_message(global_config, message, message_content="", seed=-1):
+    prompt = Prompt(prompts=message_content, channel_id=message.channel.id, message_id=message.id, seed=seed)
+    if len(message.attachments) >= 1:
+        if not config['OPENAI_API_KEY']:
+            # CLIP/GPT3 support is not enabled, so we can't do anything with uploaded images
+            return None
+        files = await download_attachments_from_message(message)
+        prompt.image_paths = json.dumps([file.data for file in files])
+        print("ADDING IMAGE PROMPT")
+    elif not message_content.startswith("!"):
+        return None
+    if len(message.attachments) >= 1:
+        if not config['OPENAI_API_KEY']:
+            # CLIP/GPT3 support is not enabled, so we can't do anything with uploaded images
+            return None
+        files = await download_attachments_from_message(message)
+        prompt.image_paths = json.dumps([file.data for file in files])
+        print("ADDING IMAGE PROMPT")
     prompt.apply_modifiers()
     if prompt.seed == -1:
         prompt.seed = random.randint(0, 1000)
@@ -146,57 +182,45 @@ async def on_message(message: discord.Message):
 
 @client.event
 async def on_reaction_add(reaction: discord.Reaction, user: discord.User):
-    # Add reacted images to the starboard channel
-    if not config['STARBOARD_CHANNEL_ID']:
+
+    if reaction.message.guild.id == 631936246591127552:
         return
 
-    # ignore reactions from some random channels
-    if reaction.message.channel.id in [1071835365729648690, 1022951067593494589]:
-        return
+    # handle eyeball emoji reaction
+    # if reaction.emoji == "👀":
+    #     # download uploaded image
+    #     message = await client.get_channel(reaction.message.channel.id).fetch_message(reaction.message.id)
+    #     image_path = await message.attachments[0].save("input.jpg")
+    #
+    #     # run detect_and_add_eyes and send modified image
+    #     if detect_and_add_eyes("input.jpg"):
+    #         with open('result.png', 'rb') as result_image:
+    #             await reaction.message.channel.send(file=discord.File(result_image, 'result.png'))
 
-    # we only care about reactions added by users on bot messages
-    if len(reaction.message.reactions) > 1 or reaction.message.author != client.user:
-        return
+    # handle starboard channel reaction
+    elif config.get('STARBOARD_CHANNEL_ID') and reaction.message.channel.id not in [1071835365729648690, 1022951067593494589]:
+        # check that reaction is added by user on bot message with no other reactions
+        if len(reaction.message.reactions) == 1 and (reaction.message.author == client.user or reaction.message.author.id == 1092594207878824068) and reaction.count == 1:
+            link = reaction.message.attachments[0].url if reaction.message.attachments else f"> **{reaction.message.author.name}**: {reaction.message.content}"
+            channel = client.get_channel(int(config['STARBOARD_CHANNEL_ID']))
+            if channel.guild == reaction.message.guild:
+                await channel.send(f"{reaction.message.jump_url}\n{link}")
+            # add the image link to good-bot-posts.txt
+            with open("good-bot-posts.txt", "a") as f:
+                f.write(f"{link}\n")
 
-    # if there are already reactions on the message, ignore
-    if sum([reaction.count for reaction in reaction.message.reactions]) > 1:
-        return
-
-    # get link of attachment
-    link = reaction.message.attachments[0].url if len(reaction.message.attachments) >= 1 else ""
-    # Get the text of the message
-
-    if not link:
-        text = reaction.message.content
-        # Get the name of the user who added the reaction
-        user_name = reaction.message.author.name
-        link = f"> **{user_name}**: {text}"
-
-    # get channel by id
-    channel = client.get_channel(int(config['STARBOARD_CHANNEL_ID']))
-    if channel.guild != reaction.message.guild:
-        return
-    # send message with link
-    await channel.send(reaction.message.jump_url + "\n" + link)
 
 
 async def download_attachments_from_message(message: discord.Message) -> list[ImageData]:
-    prompt_files = []
-    for attachment in message.attachments:
-        if attachment.filename.endswith(".png") or attachment.filename.endswith(".jpg"):
-            # generate a random filename
-            filename = f"images/{attachment.filename}_{randint(0, 1000000)}"
-            # download file as bytes
-            file_bytes = await attachment.read()
-            image_data = ImageData("data:image/png;base64," + str(base64.b64encode(file_bytes).decode("utf-8")))
-            prompt_files.append(image_data)
-    return prompt_files
+    return [ImageData(f"data:image/png;base64,{str(base64.b64encode(await attachment.read()).decode('utf-8'))}") for attachment in message.attachments if attachment.filename.endswith((".png", ".jpg"))]
 
 
 init_db(reset=False)
+
 print("Starting the web UI...")
-# webui_process = subprocess.Popen("webui.bat", cwd=config['WEB_UI_DIR'], shell=True)
+webui_process = subprocess.Popen("webui-user.bat", cwd=config['WEB_UI_DIR'], shell=True)
 print("Starting the generator script...")
 subprocess.Popen(["./venv/Scripts/python", "bot-generator.py"])
 print("Starting the Discord bot...")
-client.run(config['DISCORD_TOKEN'])
+discord.utils.setup_logging(level=logging.ERROR)
+client.run(config['DISCORD_TOKEN'], log_level=logging.ERROR)
