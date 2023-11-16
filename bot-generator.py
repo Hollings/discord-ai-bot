@@ -4,7 +4,9 @@ import logging
 import time
 
 import discord
+import openai
 import requests
+import talky
 from dotenv import dotenv_values
 from peewee import *
 
@@ -34,13 +36,19 @@ def dequeue_prompt(prompt: Prompt, out_message=None):
     # prompt.output_message_id = out_message.id
     prompt.save()
 
-
 def do_prompt(prompt: Prompt, message):
+    config = dotenv_values('.env')
+    openai.api_key = config['OPENAI_API_KEY']
+
     image_paths = json.loads(prompt.image_paths)
     output_message = None
     print("Generating prompt: " + prompt.prompts)
     files = []
-    images_description_list = []
+    images_description = None
+    if prompt.prompts and prompt.prompts[0] == "*":
+        files = [talky.generate_ai_audio(prompt.prompts[1:])]
+        return files, images_description
+
     if not image_paths:
         image_data_list = generate_txt_to_img(prompt)
         for i, image_data in enumerate(image_data_list):
@@ -54,9 +62,12 @@ def do_prompt(prompt: Prompt, message):
             files.append(image_data.encode_to_discord_file())
             prompt.seed += 1
     else:
-        images_description_list = [generate_img_to_txt(ImageData(image), prompt) for image in image_paths]
-
-    return files, images_description_list
+        try:
+            images_description = generate_img_to_txt(ImageData(image_paths[0]), prompt)
+        except Exception as e:
+            print(e)
+            images_description = str(e)
+    return files, images_description
 
 
 class Client(discord.Client):
@@ -66,8 +77,6 @@ class Client(discord.Client):
 
     async def check_and_generate(self):
         # clear terminal
-        print('\n' * 80)  # prints 80 line breaks - this is because my pycharm doesnt like clearing the terminal
-
         global_config = GlobalConfig.get(GlobalConfig.setting == "generation_disabled")
         while global_config.value is not None:
             global_config = GlobalConfig.get(GlobalConfig.setting == "generation_disabled")
@@ -89,7 +98,7 @@ class Client(discord.Client):
                 return
             await message.add_reaction("🤔")
 
-            files, descriptions = do_prompt(prompt, message)
+            files, description = do_prompt(prompt, message)
 
             if files:
                 # Send each file in its own message instead of a single message with multiple files
@@ -99,11 +108,11 @@ class Client(discord.Client):
                 res = await asyncio.gather(*input_coroutines, return_exceptions=False)
                 print("sent files")
 
-            for description in descriptions:
-                try:
-                    output_message = await asyncio.wait_for(channel.send(description, reference=message), timeout=60.0)
-                except:
-                    pass
+            try:
+                output_message = await asyncio.wait_for(channel.send(description, reference=message), timeout=60.0)
+            except:
+                pass
+
             dequeue_prompt(prompt)
             try:
                 await message.clear_reactions()

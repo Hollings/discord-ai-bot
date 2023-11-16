@@ -20,6 +20,7 @@ from models.channel_config import ChannelConfig
 from models.global_config import GlobalConfig
 from models.prompt import Prompt
 from models.user_setting import UserSetting
+from text_vestibule import respond_gpt
 
 intents = discord.Intents.default()
 intents.messages = True
@@ -72,6 +73,10 @@ async def on_message(message: discord.Message):
         with open("good-bot-posts.txt", "r") as f:
             lines = f.readlines()
             await message.channel.send(random.choice(lines))
+        return
+
+    if message.channel.id == int(config["TEXT_AI_CHANNEL_ID"]):
+        await respond_gpt(message, client)
         return
 
     # admin can turn on and off generation and give an emoji for the bot to react to messages with
@@ -212,7 +217,7 @@ async def on_reaction_add(reaction: discord.Reaction, user: discord.User):
 
 
 async def download_attachments_from_message(message: discord.Message) -> list[ImageData]:
-    return [ImageData(f"data:image/png;base64,{str(base64.b64encode(await attachment.read()).decode('utf-8'))}") for attachment in message.attachments if attachment.filename.endswith((".png", ".jpg"))]
+    return [ImageData(f"data:image/png;base64,{str(base64.b64encode(await attachment.read()).decode('utf-8'))}") for attachment in message.attachments if attachment.filename.lower().endswith((".png", ".jpg", ".jpeg",".webp"))]
 
 
 init_db(reset=False)

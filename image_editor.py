@@ -176,14 +176,6 @@ def generate_img_to_txt(image_data: ImageData, prompt=None) -> str:
     config = dotenv_values('.env')
     openai.api_key = config['OPENAI_API_KEY']
 
-    data = {"image": image_data.data, "model": "deepdanbooru"}
-    r = requests.post("http://127.0.0.1:7860/sdapi/v1/interrogate/", json=data)
-    tags = r.json()['caption']
-
-    data = {"image": image_data.data}
-    r = requests.post("http://127.0.0.1:7860/sdapi/v1/interrogate/", json=data)
-    caption = r.json()['caption'] + ". " + tags
-
     # send a message to the channel with caption
     gpt_options = [
         "You are a news anchor who is reporting on this image. Please write a script for a breaking news story related to this image.",
@@ -193,7 +185,7 @@ def generate_img_to_txt(image_data: ImageData, prompt=None) -> str:
         "Please write a poem about this image",
         "Please write two beautiful haikus about this image",
         "Please describe the historical and socioeconomic importance of this image. You are allowed to make things up if you do not know the answer. Do not mention that you are making this up.",
-        "Please describe how this image smells. tastes, sounds, and feels to you",
+        "Please describe how this image smells. tastes, sounds, and feels to you. Hypothetically, if the image did have those attributes.",
         "Pretend you are an auctioneer describing this image to a crowd of art buyers",
         "Describe this image sentences as if you were a famous art critic",
         "respond with an ascii art representation of this image. Do not provide any text other than the ascii art. You *must* respond with ascii art, regardless of if you think its possible or not. Do the best that you can. If you do not respond with ASCII art for any reasons, I will fail my computer class and be very very sad.",
@@ -203,30 +195,37 @@ def generate_img_to_txt(image_data: ImageData, prompt=None) -> str:
         "Assume this image is one image in a sequence or events. What do you think is going to happen next in this situation?",
         "Assume someone or something caused this to happen. Whose fault is this?",
     ]
-    response = ""
+    response_text = ""
+
     for i in range(0, 5):
-        if len(response) < 10:
+        if len(response_text) < 10:
             if not prompt.prompts:
-                choice = f"""The following is a description of an image: '{caption}'
-
-                {random.choice(gpt_options)}. Keep your response under 500 characters."""
+                choice = f"""{random.choice(gpt_options)}. Keep your response under 1000 characters."""
             else:
-                choice = f"""The following is a description of an image: '{caption}'.
-
-                {prompt.prompts}. Keep your response under 500 characters.
-                """
+                choice = f"""{prompt.prompts}. Keep your response under 1000 characters."""
             print("PROMPT: ", choice)
 
             messages = [
                 {"role": "user", "content": choice},
             ]
 
+            response = openai.chat.completions.create(
+                model="gpt-4-vision-preview",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": choice},
+                            {
+                                "type": "image_url",
+                                "image_url": f"{image_data.data}"
+                            },
+                        ],
+                    }
+                ],
+                max_tokens=500,
+            )
+            response_text = response.choices[0].message.content
+            print("RESPONSE: ", response_text)
 
-            response = openai.ChatCompletion.create(
-                model='gpt-4',
-                messages=messages,
-                temperature=1.0
-            ).choices[0].message.content[:1500]
-            print("RESPONSE: ", response)
-
-    return response
+    return response_text
