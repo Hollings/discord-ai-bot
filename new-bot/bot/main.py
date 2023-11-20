@@ -24,6 +24,7 @@ def initialize_bot():
     intents.guilds = True
     intents.reactions = True
     intents.message_content = True
+    intents.members = True
 
     bot = HollingsBot(command_prefix="|", intents=intents)
     bot.db = PostgresqlDatabase('postgres', user='postgres', password='postgres',

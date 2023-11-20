@@ -1,3 +1,4 @@
+import asyncio
 import json
 import random
 import re
@@ -37,11 +38,19 @@ class GptChat(commands.Cog):
             await message.channel.send("Current System Prompt: ```" + self.bot.config.get("SYSTEM_PROMPT", "(none)") + "```")
             return
         # send typing indicator
+        typing_task = asyncio.create_task(self.send_typing_indicator_delayed(message))
+        message_content_task = asyncio.create_task(self.get_gpt_chat_response(message))
+        content = await message_content_task
+        # Wait for the typing task to complete if it's still running
+        typing_task.cancel()
+        await message.channel.send(content)
+
+
+    async def send_typing_indicator_delayed(self, message):
+        timer = asyncio.sleep(1)
         async with message.channel.typing():
-            message_content = await self.get_gpt_chat_response(message)
-            await message.channel.send(message_content)
-
-
+            await asyncio.sleep(20)
+            await timer
 
     async def cog_load(self):
         print("GPT Chat cog loaded")
@@ -58,14 +67,10 @@ class GptChat(commands.Cog):
             messages=formatted_messages,
             max_tokens=800,
         )
-        print(response.choices[0].message.content)
         json_data = json.loads(response.choices[0].message.content)
-        try:
-            await message.add_reaction(json_data["emoji"])
-        except:
-            print("failed adding emoji")
-            pass
+        reaction_coroutine = message.add_reaction(json_data["emoji"])
         await message.channel.send(json_data["content"][:1999])
+        await reaction_coroutine
 
     def format_chat_history(self, messages, system_prompt="") -> list:
         formatted_messages = [{"role": "system",
@@ -77,6 +82,9 @@ class GptChat(commands.Cog):
             if total_chars > 5000:
                 break
             role = "assistant" if message.author.bot else "user"
+            member = message.guild.get_member(message.author.id)
+            nickname = member.nick if member else message.author.name
+
             formatted_messages.insert(0, {"role": role,
-                                          "content": f"(message author: '{message.author.display_name}') {message.content}"})
+                                          "content": f"(message author: '{nickname}') {message.content}"})
         return formatted_messages
