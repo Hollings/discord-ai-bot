@@ -42,6 +42,8 @@ if __name__ == "__main__":
         from cogs.starboard.starboard_cog import Starboard
         from cogs.gpt_chat.gpt_chat_cog import GptChat
         from cogs.tts.tts_cog import Tts
+        from cogs.gpt_vision.gpt_vision_cog import GptVision
+
 
         bot.logger.info(f"{bot.user.name} is now online!")
         if "StableDiffusion" not in bot.cogs:
@@ -52,6 +54,8 @@ if __name__ == "__main__":
             await bot.add_cog(GptChat(bot))
         if "Tts" not in bot.cogs:
             await bot.add_cog(Tts(bot))
+        if "GptVision" not in bot.cogs:
+            await bot.add_cog(GptVision(bot))
 
     @bot.event
     async def on_message(message):

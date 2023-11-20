@@ -37,6 +37,11 @@ class GptChat(commands.Cog):
             self.bot.config["SYSTEM_PROMPT"] = system_prompt
             await message.channel.send("Current System Prompt: ```" + self.bot.config.get("SYSTEM_PROMPT", "(none)") + "```")
             return
+
+        if len(message.attachments) > 0:
+            # let the gpt-v cog handle this
+            return
+
         # send typing indicator
         typing_task = asyncio.create_task(self.send_typing_indicator_delayed(message))
         message_content_task = asyncio.create_task(self.get_gpt_chat_response(message))
