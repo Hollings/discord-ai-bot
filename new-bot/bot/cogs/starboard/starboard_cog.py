@@ -14,7 +14,7 @@ class Starboard(commands.Cog):
     @Cog.listener("on_raw_reaction_add")
     async def on_raw_reaction_add(self, payload):
         # get the starboard channel from the config
-        starboard_channel = await self.bot.fetch_channel(self.bot.config['STARBOARD_CHANNEL_ID'])
+        starboard_channel = await self.bot.fetch_channel(int(self.bot.config['STARBOARD_CHANNEL_ID']))
 
         # get the message from the payload
         message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
@@ -33,7 +33,7 @@ class Starboard(commands.Cog):
         #         return  # Message already exists in starboard, so ignore it
 
         # if the message is in another server, ignore it
-        if message.channel.guild == starboard_channel.guild:
+        if message.channel.guild != starboard_channel.guild:
             return
 
         link = message.attachments[

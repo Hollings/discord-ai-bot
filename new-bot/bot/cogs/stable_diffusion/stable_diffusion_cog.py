@@ -24,27 +24,47 @@ class StableDiffusion(commands.Cog):
     # on message
     @Cog.listener("on_message")
     async def on_message(self, message):
+        if str(message.channel.id) not in self.bot.config["STABLE_DIFFUSION_CHANNEL_IDS"].split(","):
+            return
+
         if message.content == "!queue":
             i = self.app.control.inspect()
             queued_tasks = i.reserved()  # Get tasks that are reserved (waiting to be executed)
             num_tasks = sum(len(queued_task) for queued_task in queued_tasks.values()) if queued_tasks else 0
             await message.channel.send(f"Number of tasks in the queue: {num_tasks}")
+            return
 
-        if message.content.startswith("!"):
-            prompt = self.message_to_prompt(message)
-            tasks.text_to_image_task.delay(prompt.id)
+        if message.content.startswith("!") and not message.content.startswith("!*"):
+
+            # check for <1,2,3> syntax
+            # Pattern to find the bracketed section
+            bracket_pattern = re.compile(r"<(.*?)>")
+            match = bracket_pattern.search(message.content)
+
+            if match:
+                # Extract words within the brackets
+                words = match.group(1).split(",")
+                # Base message without the bracketed section
+                base_message = bracket_pattern.sub("{}", message.content)
+
+                # Iterate over each word and generate an image
+                for word in words:
+                    word = word.strip()
+                    full_prompt = base_message.format(word)
+                    prompt = self.message_to_prompt(message, full_prompt)  # Replace with your method
+                    tasks.text_to_image_task.delay(prompt.id)
+            else:
+                prompt = self.message_to_prompt(message)
+                tasks.text_to_image_task.delay(prompt.id)
             await message.add_reaction("🙄")
-        # elif len(message.attachments) > 0:
-        #     prompt = self.message_to_prompt(message)
-        self.bot.logger.info("on_message")
 
     async def cog_load(self):
         print("StableDiffusion cog loaded")
 
-    def message_to_prompt(self, message: Message):
+    def message_to_prompt(self, message: Message, prompt_text_override=None):
         channel_id = message.channel.id  # Get channel id
         message_id = message.id  # Get message id
-        message_content = message.content  # Get message content
+        message_content = prompt_text_override if prompt_text_override else message.content  # Get message content
 
         negative_prompt, message_content = self.parse_negative_prompt(message_content)
         seed, message_content = self.parse_seed(message_content)
@@ -106,7 +126,7 @@ class StableDiffusion(commands.Cog):
             return False, message_content
 
     def parse_steps(self, message_content):
-        return 30, message_content
+        return 20, message_content
 
     def parse_size(self, message_content):
         return 512, 512, message_content

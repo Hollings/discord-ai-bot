@@ -22,7 +22,7 @@ class Prompt(Model):
     negative_prompt = TextField(default="")
     apply_caption = BooleanField(default=True)
     status = TextField(default="pending")
-    steps = IntegerField(default=30)
+    steps = IntegerField(default=15)
     height = IntegerField(default=512)
     width = IntegerField(default=512)
     quantity = IntegerField(default=1)
