@@ -1,0 +1,19 @@
+# Use an official Python runtime as a parent image
+FROM python:3.11
+
+# Set the working directory
+WORKDIR /app
+
+# Install any needed packages specified in requirements.txt
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install psycopg2-binary
+
+# Copy the local file directory into the container at /bot
+COPY . /app/
+
+# Make port 80 available to the world outside this container
+EXPOSE 80
+
+# Run bot.py when the container launches
+CMD ["python", "./main.py"]
