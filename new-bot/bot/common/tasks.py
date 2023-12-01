@@ -3,15 +3,12 @@ import io
 
 import discord
 from celery import Celery
-from discord import Message, File
-from cogs.stable_diffusion.prompt import Prompt, PromptStatus
-from cogs.stable_diffusion.txt2img import text_to_image
 from common import celery_config
-import time
+from discord import File
 from celery.signals import worker_process_init
 from dotenv import dotenv_values
-
-from main import initialize_bot
+from cogs.image_gen.prompt import Prompt
+from cogs.image_gen import txt2img
 
 app = Celery('tasks')
 app.config_from_object(celery_config)
@@ -20,14 +17,35 @@ config = dotenv_values('.env')
 
 async def generate_image_from_prompt(*, client: discord.Client, prompt_id):
     prompt = Prompt.get(Prompt.id == prompt_id)
+    if prompt.status != "pending":
+        return
     prompt.status = "working"
     prompt.save()
     channel = await client.fetch_channel(prompt.channel_id)
-    message = await channel.fetch_message(prompt.message_id)
+    try:
+        message = await channel.fetch_message(prompt.message_id)
+    except discord.NotFound:
+        prompt.status = "failed"
+        prompt.save()
+        return
     await message.add_reaction("🤔")
-
-    captioned_images = text_to_image(prompt)
+    try:
+        captioned_images, revised_prompt = txt2img.text_to_image(prompt)
+    except Exception as e:
+        captioned_images = []
+        await message.remove_reaction("🤔", client.user)
+        await message.add_reaction("❌")
+        prompt.status = "failed"
+        prompt.save()
+        await message.channel.send("Error: " + str(e))
+        return
     tasks = []
+    if len(captioned_images) == 0:
+        await message.remove_reaction("🤔", client.user)
+        await message.add_reaction("❌")
+        prompt.status = "complete"
+        prompt.save()
+        return
     for captioned_image in captioned_images:
         # Save PIL image to BytesIO object
         image_byte_arr = io.BytesIO()
@@ -35,7 +53,9 @@ async def generate_image_from_prompt(*, client: discord.Client, prompt_id):
         image_byte_arr.seek(0)
 
         # Send image to Discord channel
-        discord_file = File(fp=image_byte_arr, filename='image.png')
+        discord_file = File(fp=image_byte_arr, filename='seed-'+str(prompt.seed)+'.png')
+        if prompt.method == "dalle3":
+            await channel.send(content="> " + revised_prompt)
         tasks.append(channel.send(file=discord_file))
 
     await asyncio.gather(*tasks,

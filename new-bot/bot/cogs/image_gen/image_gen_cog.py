@@ -1,3 +1,4 @@
+import datetime
 import random
 import re
 
@@ -7,19 +8,19 @@ from discord.ext import commands
 from discord.ext.commands import Cog
 
 from common import tasks
-from cogs.stable_diffusion.prompt import Prompt, PromptStatus
+from cogs.image_gen.prompt import Prompt, PromptStatus
 
 
 async def setup(bot):
-    stable_diffusion = StableDiffusion(bot)
+    image_gen = ImageGen(bot)
 
 
-class StableDiffusion(commands.Cog):
+class ImageGen(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         bot.db.create_tables([Prompt])
         self.app = Celery('tasks')
-        print("StableDiffusion cog init")
+        print("Image Gen cog init")
 
     # on message
     @Cog.listener("on_message")
@@ -59,7 +60,7 @@ class StableDiffusion(commands.Cog):
             await message.add_reaction("🙄")
 
     async def cog_load(self):
-        print("StableDiffusion cog loaded")
+        print("ImageGen cog loaded")
 
     def message_to_prompt(self, message: Message, prompt_text_override=None):
         channel_id = message.channel.id  # Get channel id
@@ -68,20 +69,26 @@ class StableDiffusion(commands.Cog):
 
         negative_prompt, message_content = self.parse_negative_prompt(message_content)
         seed, message_content = self.parse_seed(message_content)
-        apply_caption, message_content = self.parse_apply_caption(message_content)
+        # apply_caption, message_content = self.parse_apply_caption(message_content)
         steps, message_content = self.parse_steps(message_content)
         height, width, message_content = self.parse_size(message_content)
         quantity, message_content = self.parse_quantity(message_content)
 
         attachment_urls = [attachment.url for attachment in message.attachments]
 
+        method = "dalle3" if self.check_dalle(message) else "stable-diffusion"
+        if method == "dalle3":
+            message_content = message_content.replace("$$$", "")
+
         new_prompt = Prompt.create(
+            method=method,
             text=message_content,
             channel_id=channel_id,
             message_id=message_id,
+            user_id=message.author.id,
             seed=seed,
             negative_prompt=negative_prompt,
-            apply_caption=apply_caption,
+            apply_caption=False,
             steps=steps,
             status="pending",
             height=height,
@@ -91,6 +98,27 @@ class StableDiffusion(commands.Cog):
         )
 
         return new_prompt
+
+    def check_dalle(self, message: Message):
+        if "$$$" not in message.content:
+            return False
+        return True
+        user_id = str(message.author.id)
+        one_hour_ago = datetime.datetime.now() - datetime.timedelta(hours=1)
+
+        try:
+            last_prompt = (Prompt.select()
+                           .where((Prompt.user_id == user_id) &
+                                  (Prompt.method == "dalle3"))
+                           .order_by(Prompt.created_at.desc())
+                           .get())
+
+        except Prompt.DoesNotExist:
+            # If no record is found, the user is eligible
+            return True
+
+        return last_prompt.created_at < one_hour_ago
+
 
     def parse_negative_prompt(self, message_content):
         if "|" not in message_content:
@@ -136,17 +164,17 @@ class StableDiffusion(commands.Cog):
         index_to_start = 0  # Initialize index from which to keep the characters
 
         for i, char in enumerate(message_content):
-            # Stop iterating and set the index when an alphanumeric character is found
-            if char.isalnum():
-                index_to_start = i
-                break
+            # Stop iterating and set the index when an character that isnt ! or # is found
+
             # Increment the counter by 1 if an exclamation mark is found
-            elif char == '!':
+            if char == '!':
                 count += 1
             # Increment the counter by 5 if a pound sign is found
             elif char == '#':
                 count += 5
-
+            else:
+                index_to_start = i
+                break
         # Remove special characters from the beginning
         modified_string = message_content[index_to_start:]
 

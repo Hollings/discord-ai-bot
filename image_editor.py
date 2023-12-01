@@ -205,9 +205,6 @@ def generate_img_to_txt(image_data: ImageData, prompt=None) -> str:
                 choice = f"""{prompt.prompts}. Keep your response under 1000 characters."""
             print("PROMPT: ", choice)
 
-            messages = [
-                {"role": "user", "content": choice},
-            ]
 
             response = openai.chat.completions.create(
                 model="gpt-4-vision-preview",

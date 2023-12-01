@@ -4,7 +4,6 @@ import logging
 import os
 import random
 import subprocess
-import time
 from random import randint
 
 import discord
@@ -12,9 +11,6 @@ import requests
 from dotenv import dotenv_values
 from peewee import *
 import psutil
-
-import talky
-from eye_detect import detect_and_add_eyes
 from image_editor import ImageData
 from models.channel_config import ChannelConfig
 from models.global_config import GlobalConfig
@@ -27,13 +23,24 @@ intents.messages = True
 intents.guilds = True
 intents.reactions = True
 intents.message_content = True
-client = discord.Client(intents=intents)
+# load env variables
+config = dotenv_values('.env')
+config["SYSTEM_PROMPT"] = config.get("SYSTEM_PROMPT", "")
+
+
+class Client(discord.Client):
+    def __init__(self, config, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.config = config
+
+
+client = Client(intents=intents, config=config)
 
 db = SqliteDatabase('bot.db')
 
-# load env variables
-config = dotenv_values('.env')
 webui_process = None
+
+
 # # Adjust TTS properties (Optional)
 # tts_engine = pyttsx3.init()
 #
@@ -49,6 +56,7 @@ def init_db(reset: bool = False):
     db.create_tables([Prompt, UserSetting, ChannelConfig, GlobalConfig])
 
     GlobalConfig.get_or_create(setting="generation_disabled", defaults={"value": None})
+
 
 @client.event
 async def on_ready():
@@ -75,6 +83,21 @@ async def on_message(message: discord.Message):
             await message.channel.send(random.choice(lines))
         return
 
+    if message.content == "!system":
+        # print system info
+        await message.channel.send("Current System Prompt: ```" + config.get("SYSTEM_PROMPT", "(none)") + "```")
+        return
+
+    if message.content.startswith("!system "):
+        system_prompt = message.content.replace("!system", "").strip()
+        if system_prompt == "reset":
+            system_prompt = ""
+        config["SYSTEM_PROMPT"] = system_prompt
+        await message.channel.send("Current System Prompt: ```" + config.get("SYSTEM_PROMPT", "(none)") + "```")
+        return
+
+
+
     if message.channel.id == int(config["TEXT_AI_CHANNEL_ID"]):
         await respond_gpt(message, client)
         return
@@ -92,6 +115,8 @@ async def on_message(message: discord.Message):
             ChannelConfig.delete().where(ChannelConfig.channel_id == message.channel.id).execute()
             await message.add_reaction("✅")
             return
+
+
         if message.content.startswith("!off"):
             # I dont think this work
 
@@ -142,6 +167,7 @@ async def on_message(message: discord.Message):
     for message_content in message_list:
         await create_prompt_from_message(global_config, message, message_content, seed=seed)
 
+
 def split_sentence(input_string):
     start_index = input_string.index("<") + 1
     end_index = input_string.index(">")
@@ -149,6 +175,7 @@ def split_sentence(input_string):
     options_list = options_string.split(",")
     sentence = input_string.replace(options_string, "")
     return [sentence.replace("<>", option.strip()) for option in options_list]
+
 
 async def create_prompt_from_message(global_config, message, message_content="", seed=-1):
     prompt = Prompt(prompts=message_content, channel_id=message.channel.id, message_id=message.id, seed=seed)
@@ -187,7 +214,6 @@ async def create_prompt_from_message(global_config, message, message_content="",
 
 @client.event
 async def on_reaction_add(reaction: discord.Reaction, user: discord.User):
-
     if reaction.message.guild.id == 631936246591127552:
         return
 
@@ -203,10 +229,13 @@ async def on_reaction_add(reaction: discord.Reaction, user: discord.User):
     #             await reaction.message.channel.send(file=discord.File(result_image, 'result.png'))
 
     # handle starboard channel reaction
-    elif config.get('STARBOARD_CHANNEL_ID') and reaction.message.channel.id not in [1071835365729648690, 1022951067593494589]:
+    elif config.get('STARBOARD_CHANNEL_ID') and reaction.message.channel.id not in [1071835365729648690,
+                                                                                    1022951067593494589]:
         # check that reaction is added by user on bot message with no other reactions
-        if len(reaction.message.reactions) == 1 and (reaction.message.author == client.user or reaction.message.author.id == 1092594207878824068) and reaction.count == 1:
-            link = reaction.message.attachments[0].url if reaction.message.attachments else f"> **{reaction.message.author.name}**: {reaction.message.content}"
+        if len(reaction.message.reactions) == 1 and (
+                reaction.message.author == client.user or reaction.message.author.id == 1092594207878824068) and reaction.count == 1:
+            link = reaction.message.attachments[
+                0].url if reaction.message.attachments else f"> **{reaction.message.author.name}**: {reaction.message.content}"
             channel = client.get_channel(int(config['STARBOARD_CHANNEL_ID']))
             if channel.guild == reaction.message.guild:
                 await channel.send(f"{reaction.message.jump_url}\n{link}")
@@ -215,15 +244,16 @@ async def on_reaction_add(reaction: discord.Reaction, user: discord.User):
                 f.write(f"{link}\n")
 
 
-
 async def download_attachments_from_message(message: discord.Message) -> list[ImageData]:
-    return [ImageData(f"data:image/png;base64,{str(base64.b64encode(await attachment.read()).decode('utf-8'))}") for attachment in message.attachments if attachment.filename.lower().endswith((".png", ".jpg", ".jpeg",".webp"))]
+    return [ImageData(f"data:image/png;base64,{str(base64.b64encode(await attachment.read()).decode('utf-8'))}") for
+            attachment in message.attachments if
+            attachment.filename.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))]
 
 
 init_db(reset=False)
 
 print("Starting the web UI...")
-webui_process = subprocess.Popen("webui-user.bat", cwd=config['WEB_UI_DIR'], shell=True)
+# webui_process = subprocess.Popen("webui-user.bat", cwd=config['WEB_UI_DIR'], shell=True)
 print("Starting the generator script...")
 subprocess.Popen(["./venv/Scripts/python", "bot-generator.py"])
 print("Starting the Discord bot...")

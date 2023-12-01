@@ -21,8 +21,12 @@ class GptChat(commands.Cog):
     # on message
     @Cog.listener("on_message")
     async def on_message(self, message):
-        if message.channel.id != int(self.bot.config["GPT_CHAT_CHANNEL_ID"]):
+        if message.channel.id != int(self.bot.config["GPT_CHAT_CHANNEL_ID"]) and message.channel.id != int(self.bot.config["DEBUG_CHANNEL_ID"]):
             return
+
+        if message.content.startswith("!*"):
+            return
+
         if message.author.bot:
             return
 

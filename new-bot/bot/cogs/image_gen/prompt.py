@@ -1,6 +1,8 @@
+import datetime
 import json
 from enum import Enum
 
+import peewee
 from peewee import *
 
 db = PostgresqlDatabase('postgres', user='postgres', password='postgres',
@@ -12,10 +14,14 @@ class PromptStatus(Enum):
     COMPLETE = "complete"
     FAILED = "failed"
 
-class Prompt(Model):
+class Prompt(peewee.Model):
+    method = TextField(default="stable-diffusion")
     text = TextField(null=True)
     channel_id = TextField()
     message_id = TextField()
+    user_id = TextField()
+    created_at = DateTimeField(default=datetime.datetime.now)
+
     seed = IntegerField(default=-1)
     output_message_id = TextField(null=True)
     model = TextField(default="stable-diffusion-v1")
@@ -30,12 +36,12 @@ class Prompt(Model):
 
     def to_json(self):
         return json.dumps({
+            "method": self.method,
             "text": self.text,
             "channel_id": self.channel_id,
             "message_id": self.message_id,
             "seed": self.seed,
             "output_message_id": self.output_message_id,
-            "model": self.model,
             "negative_prompt": self.negative_prompt,
             "apply_caption": self.apply_caption,
             "status": self.status,

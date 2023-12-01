@@ -38,7 +38,7 @@ if __name__ == "__main__":
     # Load the cog from the specified file
     @bot.event
     async def on_ready():
-        from cogs.stable_diffusion.stable_diffusion_cog import StableDiffusion
+        from cogs.image_gen.image_gen_cog import ImageGen
         from cogs.starboard.starboard_cog import Starboard
         from cogs.gpt_chat.gpt_chat_cog import GptChat
         from cogs.tts.tts_cog import Tts
@@ -46,8 +46,8 @@ if __name__ == "__main__":
 
 
         bot.logger.info(f"{bot.user.name} is now online!")
-        if "StableDiffusion" not in bot.cogs:
-            await bot.add_cog(StableDiffusion(bot))
+        if "ImageGen" not in bot.cogs:
+            await bot.add_cog(ImageGen(bot))
         if "Starboard" not in bot.cogs:
             await bot.add_cog(Starboard(bot))
         if "GptChat" not in bot.cogs:
@@ -60,7 +60,7 @@ if __name__ == "__main__":
     @bot.event
     async def on_message(message):
         if message.content == "!restart":
-            await bot.reload_extension("cogs.stable_diffusion.stable_diffusion_cog")
+            await bot.reload_extension("cogs.image_gen.stable_diffusion_cog")
             await bot.reload_extension("cogs.starboard.starboard_cog")
             await bot.reload_extension("cogs.gpt_chat.gpt_chat_cog")
             await message.channel.send("Reloaded all cogs")
