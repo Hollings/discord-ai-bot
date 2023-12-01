@@ -1,8 +1,0 @@
-*.env
-/bot.db
-/images/*
-/.idea/*
-/tmp/*
-/new-bot/bot/venv/
-/new-bot/postgres-data/
-/new-bot/bot/__pycache__/
