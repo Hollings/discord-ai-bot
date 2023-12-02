@@ -23,6 +23,7 @@ class Prompt(peewee.Model):
     created_at = DateTimeField(default=datetime.datetime.now)
 
     seed = IntegerField(default=-1)
+    # parent_prompt = ForeignKeyField('self', null=True)
     output_message_id = TextField(null=True)
     model = TextField(default="stable-diffusion-v1")
     negative_prompt = TextField(default="")
