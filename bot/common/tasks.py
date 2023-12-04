@@ -95,13 +95,13 @@ def create_text_to_image_task(prompt:Prompt):
     else:
         print("Invalid method")
 
-@app.task(name='text_to_image_task', queue='local')
+@app.task(name='text_to_image_task_local', queue='local')
 def text_to_image_task_local(prompt_id):
     print("AAAAA")
     asyncio.run(
         run_method_with_bot(generate_image_from_prompt, prompt_id=prompt_id))
 
-@app.task(name='text_to_image_task', queue='api')
+@app.task(name='text_to_image_task_api', queue='api')
 def text_to_image_task_api(prompt_id):
     print("AAAAA")
     asyncio.run(
