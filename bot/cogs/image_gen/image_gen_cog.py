@@ -2,6 +2,7 @@ import datetime
 import random
 import re
 
+from decimal import Decimal
 from celery import Celery
 from discord import Message
 from discord.ext import commands
@@ -47,26 +48,37 @@ class ImageGen(commands.Cog):
 
 
             if double_bracket_match:
-                # Extract words within the brackets
                 words = double_bracket_match.group(1).split(",")
-                if len(words)>3:
-                    await message.channel.send("invalid gif syntax, use <<from, to, step>>")
+                if len(words) == 2:
+                    words.append("1")
+
+                if len(words) != 3:
+                    await message.channel.send("invalid gif syntax, use <<from, to, step>> or <<from, to>>")
                     return
-                # convert each word to decimal
-                words = [int(word.strip()) for word in words]
+
+
+                # Convert each word to decimal
+                words = [Decimal(word.strip()) for word in words]
 
                 # Base message without the bracketed section
                 base_message = double_bracket_pattern.sub("{}", message.content)
                 full_prompt = base_message.format(words[0])
                 parent_prompt = None
-                for i in range(int(words[0]), int(words[1]) + 1, int(words[2])):
-                    full_prompt = base_message.format(i)
-                    prompt = self.message_to_prompt(message, full_prompt, parent_prompt=parent_prompt)  # Replace with your method
+
+                # Use Decimal in the range-like function
+                current = words[0]
+                end = words[1]
+                step = words[2]
+                while current <= end:
+                    full_prompt = base_message.format(current)
+                    prompt = self.message_to_prompt(message, full_prompt,
+                                                    parent_prompt=parent_prompt)  # Replace with your method
                     if not parent_prompt:
                         parent_prompt = prompt
                     prompt.seed = parent_prompt.seed
-                    prompt.quantity = 1
                     prompt.save()
+
+                    current += step
                 tasks.create_text_to_image_task(parent_prompt)
             elif bracket_match:
                 # Extract words within the brackets
