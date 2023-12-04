@@ -18,6 +18,7 @@ async def setup(bot):
 class ImageGen(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        # bot.db.drop_tables([Prompt])
         bot.db.create_tables([Prompt])
         self.app = Celery('tasks')
         print("Image Gen cog init")
@@ -40,11 +41,36 @@ class ImageGen(commands.Cog):
             # check for <1,2,3> syntax
             # Pattern to find the bracketed section
             bracket_pattern = re.compile(r"<(.*?)>")
-            match = bracket_pattern.search(message.content)
+            bracket_match = bracket_pattern.search(message.content)
+            double_bracket_pattern = re.compile(r"<<(.*?)>>")
+            double_bracket_match = double_bracket_pattern.search(message.content)
 
-            if match:
+
+            if double_bracket_match:
                 # Extract words within the brackets
-                words = match.group(1).split(",")
+                words = double_bracket_match.group(1).split(",")
+                if len(words)>3:
+                    await message.channel.send("invalid gif syntax, use <<from, to, step>>")
+                    return
+                # convert each word to decimal
+                words = [int(word.strip()) for word in words]
+
+                # Base message without the bracketed section
+                base_message = double_bracket_pattern.sub("{}", message.content)
+                full_prompt = base_message.format(words[0])
+                parent_prompt = None
+                for i in range(int(words[0]), int(words[1]) + 1, int(words[2])):
+                    full_prompt = base_message.format(i)
+                    prompt = self.message_to_prompt(message, full_prompt, parent_prompt=parent_prompt)  # Replace with your method
+                    if not parent_prompt:
+                        parent_prompt = prompt
+                    prompt.seed = parent_prompt.seed
+                    prompt.quantity = 1
+                    prompt.save()
+                tasks.create_text_to_image_task(parent_prompt)
+            elif bracket_match:
+                # Extract words within the brackets
+                words = bracket_match.group(1).split(",")
                 # Base message without the bracketed section
                 base_message = bracket_pattern.sub("{}", message.content)
 
@@ -54,6 +80,8 @@ class ImageGen(commands.Cog):
                     full_prompt = base_message.format(word)
                     prompt = self.message_to_prompt(message, full_prompt)  # Replace with your method
                     tasks.create_text_to_image_task(prompt)
+
+
             else:
                 try:
                     prompt = self.message_to_prompt(message)
@@ -67,7 +95,7 @@ class ImageGen(commands.Cog):
     async def cog_load(self):
         print("ImageGen cog loaded")
 
-    def message_to_prompt(self, message: Message, prompt_text_override=None):
+    def message_to_prompt(self, message: Message, prompt_text_override=None, parent_prompt=None):
         channel_id = message.channel.id  # Get channel id
         message_id = message.id  # Get message id
         message_content = prompt_text_override if prompt_text_override else message.content  # Get message content
@@ -99,32 +127,46 @@ class ImageGen(commands.Cog):
             height=height,
             width=width,
             quantity=quantity,
-            attachment_urls=attachment_urls
+            attachment_urls=attachment_urls,
+            parent_prompt=parent_prompt,
         )
 
         return new_prompt
 
-    def check_dalle(self, message: Message, minutes=15):
+    def check_dalle(self, message: Message, minutes=45):
         if "$$$" not in message.content:
             return False
         user_id = str(message.author.id)
-        # todo - add minutes to env/settings?
-        one_interval_ago = datetime.datetime.now() - datetime.timedelta(minutes=minutes)
+
+        one_hour_ago = datetime.datetime.now() - datetime.timedelta(minutes=minutes)
 
         try:
-            last_prompt = (Prompt.select()
-                           .where((Prompt.user_id == user_id) &
-                                  (Prompt.method == "dalle3"))
-                           .order_by(Prompt.created_at.desc())
-                           .get())
+            prompt_count = (Prompt.select()
+                            .where((Prompt.user_id == user_id) &
+                                   (Prompt.method == "dalle3") &
+                                   (Prompt.created_at > one_hour_ago))
+                            .count())
 
-        except Prompt.DoesNotExist:
-            # If no record is found, the user is eligible
-            return True
-        if last_prompt.created_at > one_interval_ago:
-            remaining_time = last_prompt.created_at - one_interval_ago
-            readable_time = divmod(remaining_time.total_seconds(), 60)
-            raise Exception(f"Dalle is on cooldown for {message.author.nick}. Try again in {readable_time[0]:.0f} minutes and {readable_time[1]:.0f} seconds.")
+        except Exception as e:
+            # Handle any other exceptions
+            raise e
+
+        if prompt_count >= 3:
+            # Calculate the time until the user can use Dalle again
+            last_prompt_time = (Prompt.select(Prompt.created_at)
+                                .where((Prompt.user_id == user_id) &
+                                       (Prompt.method == "dalle3"))
+                                .order_by(Prompt.created_at.desc())
+                                .get()).created_at
+
+            next_available_time = last_prompt_time + datetime.timedelta(minutes=minutes)
+            remaining_time = next_available_time - datetime.datetime.now()
+            readable_time = divmod(remaining_time.total_seconds(), minutes)
+
+            if remaining_time.total_seconds() > 0:
+                raise Exception(
+                    f"Dalle is on cooldown for {message.author.nick}. Try again in {readable_time[0]:.0f} minutes and {readable_time[1]:.0f} seconds.")
+
         return True
 
     def parse_negative_prompt(self, message_content):

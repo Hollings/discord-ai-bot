@@ -13,11 +13,12 @@ import io
 from cogs.image_gen.prompt import Prompt
 
 
-def a1_image_gen(prompt: Prompt):
+def a1_image_gen(prompt: Prompt, parent_prompt_id=None):
     config = dotenv_values('.env')
     print("generating prompt: " + prompt.text)
     data = {
-        "enable_hr": True,
+        "enable_hr": False if (prompt.parent_prompt or parent_prompt_id) else True,
+        # "enable_hr": True,
         "denoising_strength": 0.45,
         "hr_scale": 2,
         "hr_second_pass_steps": 5,
@@ -62,12 +63,12 @@ def dalle_image_gen(prompt: Prompt):
     return [images.data[0].b64_json], images.data[0].revised_prompt
 
 
-def get_generation_from_api(prompt) -> Image:
+def get_generation_from_api(prompt, parent_prompt_id=None) -> Image:
     images = []
     revised_prompt = ""
     # images = a1_image_gen(prompt)
     if prompt.method == "stable-diffusion":
-        images = a1_image_gen(prompt)
+        images = a1_image_gen(prompt, parent_prompt_id)
     elif prompt.method == "dalle3":
         images, reworded_prompt = dalle_image_gen(prompt)
         revised_prompt = reworded_prompt
@@ -128,8 +129,8 @@ def batch_add_caption(generated_images, prompt):
     return captioned_images
 
 
-def text_to_image(prompt: Prompt):
-    generated_images, revised_prompt = get_generation_from_api(prompt)
+def text_to_image(prompt: Prompt, parent_prompt_id=None):
+    generated_images, revised_prompt = get_generation_from_api(prompt, parent_prompt_id)
     if len(generated_images) == 0:
         return [], ""
     # convert the b64 encoded images to PIL images

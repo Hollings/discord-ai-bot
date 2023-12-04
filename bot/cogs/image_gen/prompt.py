@@ -21,7 +21,7 @@ class Prompt(peewee.Model):
     message_id = TextField()
     user_id = TextField()
     created_at = DateTimeField(default=datetime.datetime.now)
-
+    parent_prompt = ForeignKeyField('self', null=True)
     seed = IntegerField(default=-1)
     # parent_prompt = ForeignKeyField('self', null=True)
     output_message_id = TextField(null=True)

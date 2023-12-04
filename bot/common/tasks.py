@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import io
 
 import discord
@@ -10,6 +11,7 @@ from celery.signals import worker_process_init
 from dotenv import dotenv_values
 from cogs.image_gen.prompt import Prompt
 from cogs.image_gen import txt2img
+from PIL import Image
 
 app = Celery('tasks')
 app.config_from_object(celery_config)
@@ -23,6 +25,46 @@ async def send_sleep_emoji(*, client, prompt_id):
     # if the sleepy guy emoji isnt already there, add it
     if not any(reaction.emoji == "🥱" for reaction in message.reactions):
         await message.add_reaction("🥱")
+
+async def generate_gif_from_prompt(*, client: discord.Client, prompt_id):
+    # get prompt children
+
+    prompt = Prompt.get(Prompt.id == prompt_id)
+    if prompt.status != "pending":
+        return
+    # send the gif in the channel
+    channel = await client.fetch_channel(prompt.channel_id)
+    message = await channel.fetch_message(prompt.message_id)
+    await message.add_reaction("🤔")
+    children = Prompt.select().where(Prompt.parent_prompt_id == prompt.id).order_by(Prompt.id)
+    for child in children:
+        child.status = "working"
+        child.save()
+    prompt.status = "working"
+    prompt.save()
+
+    frames = []
+    for prompt_frame in [prompt, *children]:
+        image, _ = txt2img.text_to_image(prompt_frame, parent_prompt_id=prompt.id)
+        # decoded_image = base64.b64decode(b64_frame[0])
+        # image = Image.open(io.BytesIO(decoded_image))
+        frames.append(image[0])
+    saved_image = frames[0].save('output.gif', save_all=True, append_images=frames[1:], loop=0, duration=200, optimize=True)
+
+
+    await message.remove_reaction("🤔", client.user)
+    await message.add_reaction("✅")
+    await message.channel.send(file=File('output.gif'))
+
+    # mark prompt as done
+    prompt.status = "done"
+    prompt.save()
+    for child in children:
+        child.status = "done"
+        child.save()
+
+    return saved_image
+
 
 async def generate_image_from_prompt(*, client: discord.Client, prompt_id):
     prompt = Prompt.get(Prompt.id == prompt_id)
@@ -98,6 +140,10 @@ async def run_method_with_bot(the_method, **kwargs):
 
 def create_text_to_image_task(prompt: Prompt):
     print("Creating task for prompt " + str(prompt.id) + " with method " + prompt.method)
+    # check if the prompt has any children
+    children = Prompt.select().where(Prompt.parent_prompt_id == prompt.id)
+    if len(children) > 0:
+        text_to_gif_task.delay(prompt.id)
     if prompt.method == 'stable-diffusion':
         text_to_image_task_local.delay(prompt.id)
     elif prompt.method == 'dalle3':
@@ -123,6 +169,14 @@ def text_to_image_task_api(prompt_id):
     print("AAAAA")
     asyncio.run(
         run_method_with_bot(generate_image_from_prompt, prompt_id=prompt_id))
+
+
+@app.task(name='text_to_gif_task', queue='local')
+def text_to_gif_task(prompt_id):
+    print("AAAAA")
+    asyncio.run(
+        run_method_with_bot(generate_gif_from_prompt, prompt_id=prompt_id))
+
 
 @app.task(name='queue_all_pending_prompts_task')
 def queue_all_pending_prompts_task():
