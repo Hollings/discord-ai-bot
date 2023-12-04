@@ -2,6 +2,7 @@ import asyncio
 import io
 
 import discord
+import requests
 from celery import Celery
 from common import celery_config
 from discord import File
@@ -14,6 +15,14 @@ app = Celery('tasks')
 app.config_from_object(celery_config)
 config = dotenv_values('.env')
 
+async def send_sleep_emoji(*, client, prompt_id):
+    prompt= Prompt.get(Prompt.id == prompt_id)
+    channel = await client.fetch_channel(prompt.channel_id)
+    message = await channel.fetch_message(prompt.message_id)
+    # send the sleepy guy emoji
+    # if the sleepy guy emoji isnt already there, add it
+    if not any(reaction.emoji == "🥱" for reaction in message.reactions):
+        await message.add_reaction("🥱")
 
 async def generate_image_from_prompt(*, client: discord.Client, prompt_id):
     prompt = Prompt.get(Prompt.id == prompt_id)
@@ -87,7 +96,8 @@ async def run_method_with_bot(the_method, **kwargs):
     await client.connect()
 
 
-def create_text_to_image_task(prompt:Prompt):
+def create_text_to_image_task(prompt: Prompt):
+    print("Creating task for prompt " + str(prompt.id) + " with method " + prompt.method)
     if prompt.method == 'stable-diffusion':
         text_to_image_task_local.delay(prompt.id)
     elif prompt.method == 'dalle3':
@@ -95,11 +105,18 @@ def create_text_to_image_task(prompt:Prompt):
     else:
         print("Invalid method")
 
-@app.task(name='text_to_image_task_local', queue='local')
-def text_to_image_task_local(prompt_id):
-    print("AAAAA")
-    asyncio.run(
-        run_method_with_bot(generate_image_from_prompt, prompt_id=prompt_id))
+@app.task(bind=True, name='text_to_image_task_local', queue='local', max_retries=None, default_retry_delay=30)
+def text_to_image_task_local(self, prompt_id):
+    try:
+        # check http://localhost:7860/internal/ping for a response
+        response = requests.get(f"{config['GRADIO_API_BASE_URL']}internal/ping")
+        if response.status_code != 200:
+            raise Exception("Local server not running")
+        asyncio.run(run_method_with_bot(generate_image_from_prompt, prompt_id=prompt_id))
+    except Exception as e:
+        asyncio.run(run_method_with_bot(send_sleep_emoji, prompt_id=prompt_id))
+        print("Retrying task, attempt number: %s", self.request.retries)
+        self.retry(exc=e)
 
 @app.task(name='text_to_image_task_api', queue='api')
 def text_to_image_task_api(prompt_id):
