@@ -127,13 +127,22 @@ class ImageGen(commands.Cog):
             raise Exception(f"Dalle is on cooldown for {message.author.nick}. Try again in {readable_time[0]:.0f} minutes and {readable_time[1]:.0f} seconds.")
         return True
 
-
     def parse_negative_prompt(self, message_content):
-        if "|" not in message_content:
+        # Replace all '|' inside square brackets with a placeholder
+        placeholder = "PLACEHOLDER"
+        modified_content = re.sub(r'(\[.*?])', lambda x: x.group().replace('|', placeholder), message_content)
+
+        # Split the modified content by '|'
+        split_message = modified_content.split('|', 1)
+
+        if len(split_message) == 2:
+            rest, negative_prompt  = split_message
+            # Restore the placeholder in both parts
+            negative_prompt = negative_prompt.replace(placeholder, '|')
+            rest = rest.replace(placeholder, '|')
+            return negative_prompt, rest
+        else:
             return "", message_content
-        # split the message content by the last | character
-        split_message = message_content.rsplit("|", 1)
-        return split_message[1], split_message[0]
 
     def parse_seed(self, message_content):
 
