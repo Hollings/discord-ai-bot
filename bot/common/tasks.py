@@ -54,9 +54,12 @@ async def generate_image_from_prompt(*, client: discord.Client, prompt_id):
 
         # Send image to Discord channel
         discord_file = File(fp=image_byte_arr, filename='seed-'+str(prompt.seed)+'.png')
+
         if prompt.method == "dalle3":
-            await channel.send(content="> " + revised_prompt)
-        tasks.append(channel.send(file=discord_file))
+            content = "> " + revised_prompt
+        else:
+            content = ""
+        tasks.append(channel.send(file=discord_file, content=content))
 
     await asyncio.gather(*tasks,
                          message.remove_reaction("🤔", client.user),
@@ -84,8 +87,22 @@ async def run_method_with_bot(the_method, **kwargs):
     await client.connect()
 
 
-@app.task(name='text_to_image_task')
-def text_to_image_task(prompt_id):
+def create_text_to_image_task(prompt:Prompt):
+    if prompt.method == 'stable-diffusion':
+        text_to_image_task_local.delay(prompt.id)
+    elif prompt.method == 'dalle3':
+        text_to_image_task_api.delay(prompt.id)
+    else:
+        print("Invalid method")
+
+@app.task(name='text_to_image_task', queue='local')
+def text_to_image_task_local(prompt_id):
+    print("AAAAA")
+    asyncio.run(
+        run_method_with_bot(generate_image_from_prompt, prompt_id=prompt_id))
+
+@app.task(name='text_to_image_task', queue='api')
+def text_to_image_task_api(prompt_id):
     print("AAAAA")
     asyncio.run(
         run_method_with_bot(generate_image_from_prompt, prompt_id=prompt_id))
@@ -97,12 +114,12 @@ def queue_all_pending_prompts_task():
         (Prompt.status == "pending") | (Prompt.status == "working")
     )
     for prompt in prompts:
-        print(f"Queuing prompt {prompt.id}")
-        text_to_image_task.delay(prompt.id)
+        create_text_to_image_task(prompt)
+
+
 
 @worker_process_init.connect
 def on_worker_init(**_):
-    pass
     queue_all_pending_prompts_task.delay()
 
 

@@ -1,2 +1,3 @@
 *.db
 /bot/.env
+/postgres-data/

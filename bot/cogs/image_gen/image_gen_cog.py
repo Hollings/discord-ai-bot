@@ -53,10 +53,10 @@ class ImageGen(commands.Cog):
                     word = word.strip()
                     full_prompt = base_message.format(word)
                     prompt = self.message_to_prompt(message, full_prompt)  # Replace with your method
-                    tasks.text_to_image_task.delay(prompt.id)
+                    tasks.create_text_to_image_task(prompt)
             else:
                 prompt = self.message_to_prompt(message)
-                tasks.text_to_image_task.delay(prompt.id)
+                tasks.create_text_to_image_task(prompt)
             await message.add_reaction("🙄")
 
     async def cog_load(self):
@@ -102,7 +102,7 @@ class ImageGen(commands.Cog):
     def check_dalle(self, message: Message):
         if "$$$" not in message.content:
             return False
-        return True
+
         user_id = str(message.author.id)
         one_hour_ago = datetime.datetime.now() - datetime.timedelta(hours=1)
 
