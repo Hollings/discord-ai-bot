@@ -99,12 +99,12 @@ class ImageGen(commands.Cog):
 
         return new_prompt
 
-    def check_dalle(self, message: Message):
+    def check_dalle(self, message: Message, minutes=15):
         if "$$$" not in message.content:
             return False
-
         user_id = str(message.author.id)
-        one_hour_ago = datetime.datetime.now() - datetime.timedelta(hours=1)
+        # todo - add minutes to env/settings?
+        one_interval_ago = datetime.datetime.now() - datetime.timedelta(minutes=minutes)
 
         try:
             last_prompt = (Prompt.select()
@@ -117,7 +117,7 @@ class ImageGen(commands.Cog):
             # If no record is found, the user is eligible
             return True
 
-        return last_prompt.created_at < one_hour_ago
+        return last_prompt.created_at < one_interval_ago
 
 
     def parse_negative_prompt(self, message_content):
