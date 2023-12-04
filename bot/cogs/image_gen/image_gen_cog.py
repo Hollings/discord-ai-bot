@@ -55,8 +55,13 @@ class ImageGen(commands.Cog):
                     prompt = self.message_to_prompt(message, full_prompt)  # Replace with your method
                     tasks.create_text_to_image_task(prompt)
             else:
-                prompt = self.message_to_prompt(message)
-                tasks.create_text_to_image_task(prompt)
+                try:
+                    prompt = self.message_to_prompt(message)
+                    tasks.create_text_to_image_task(prompt)
+                except Exception as e:
+                    await message.channel.send(str(e))
+                    await message.add_reaction("❌")
+                    return
             await message.add_reaction("🙄")
 
     async def cog_load(self):
@@ -116,8 +121,11 @@ class ImageGen(commands.Cog):
         except Prompt.DoesNotExist:
             # If no record is found, the user is eligible
             return True
-
-        return last_prompt.created_at < one_interval_ago
+        if last_prompt.created_at > one_interval_ago:
+            remaining_time = last_prompt.created_at - one_interval_ago
+            readable_time = divmod(remaining_time.total_seconds(), 60)
+            raise Exception(f"Dalle is on cooldown for {message.author.nick}. Try again in {readable_time[0]:.0f} minutes and {readable_time[1]:.0f} seconds.")
+        return True
 
 
     def parse_negative_prompt(self, message_content):
