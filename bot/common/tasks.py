@@ -44,12 +44,14 @@ async def generate_gif_from_prompt(*, client: discord.Client, prompt_id):
     prompt.save()
 
     frames = []
-    for prompt_frame in [prompt, *children]:
-        image, _ = txt2img.text_to_image(prompt_frame, parent_prompt_id=prompt.id)
-        # decoded_image = base64.b64decode(b64_frame[0])
-        # image = Image.open(io.BytesIO(decoded_image))
-        frames.append(image[0])
-    saved_image = frames[0].save('output.gif', save_all=True, append_images=frames[1:], loop=0, duration=200, optimize=True)
+    message = await channel.fetch_message(prompt.message_id)
+    prompts = [prompt, *children]
+    image_list, _ = txt2img.batch_text_to_image(prompts, parent_prompt_id=prompt.id)
+    for index, image in enumerate(image_list):
+        frames.append(image)
+
+    frame_duration = 200
+    saved_image = frames[0].save('output.gif', save_all=True, append_images=frames[1:], loop=0, duration=frame_duration, optimize=True)
 
 
     await message.remove_reaction("🤔", client.user)

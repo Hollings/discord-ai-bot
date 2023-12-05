@@ -25,6 +25,7 @@ class Prompt(peewee.Model):
     seed = IntegerField(default=-1)
     # parent_prompt = ForeignKeyField('self', null=True)
     output_message_id = TextField(null=True)
+    # duration = IntegerField(default=300) # length of each frame for gifs
     model = TextField(default="stable-diffusion-v1")
     negative_prompt = TextField(default="")
     apply_caption = BooleanField(default=True)

@@ -10,29 +10,28 @@ from PIL import Image, ImageDraw, ImageFont
 from dotenv import dotenv_values
 import io
 
-from cogs.image_gen.prompt import Prompt
-
-
-def a1_image_gen(prompt: Prompt, parent_prompt_id=None):
+def a1_image_gen(prompts, parent_prompt_id=None):
     config = dotenv_values('.env')
-    print("generating prompt: " + prompt.text)
+    print("generating prompt: " + prompts[0].text)
     data = {
-        "enable_hr": False if (prompt.parent_prompt or parent_prompt_id) else True,
+        "enable_hr": False if (prompts[0].parent_prompt or parent_prompt_id) else True,
         # "enable_hr": True,
         "denoising_strength": 0.45,
         "hr_scale": 2,
         "hr_second_pass_steps": 5,
         "hr_upscaler": "ESRGAN_4x",
-        "prompt": prompt.text,
-        "seed": prompt.seed,
-        "n_iter": prompt.quantity,
-        "steps": prompt.steps,
-        "height": prompt.height,
-        "width": prompt.width,
-        "negative_prompt": prompt.negative_prompt,
+        "prompt": "",
+        "seed": prompts[0].seed,
+        "n_iter": prompts[0].quantity,
+        "steps": prompts[0].steps,
+        "height": prompts[0].height,
+        "width": prompts[0].width,
+        "negative_prompt": prompts[0].negative_prompt,
         "sampler_name": config['SAMPLER'],
         "batch_size": int(config['BATCH_SIZE']),
         "cfg_scale": config["CFG_SCALE"],
+        "script_name": "prompts from file or textbox",
+        "script_args": [False, True, "\n".join([prompt.text for prompt in prompts])]
     }
 
     r = requests.post(f"{config['GRADIO_API_BASE_URL']}sdapi/v1/txt2img", json=data)
@@ -45,7 +44,7 @@ def a1_image_gen(prompt: Prompt, parent_prompt_id=None):
     return files
 
 
-def dalle_image_gen(prompt: Prompt):
+def dalle_image_gen(prompt):
     print("generating DALLE prompt: " + prompt.text)
     config = dotenv_values('.env')
     openai.api_key = config['OPENAI_API_KEY']
@@ -63,16 +62,16 @@ def dalle_image_gen(prompt: Prompt):
     return [images.data[0].b64_json], images.data[0].revised_prompt
 
 
-def get_generation_from_api(prompt, parent_prompt_id=None) -> Image:
+def get_generation_from_api(prompts, parent_prompt_id=None) -> Image:
     images = []
     revised_prompt = ""
     # images = a1_image_gen(prompt)
-    if prompt.method == "stable-diffusion":
-        images = a1_image_gen(prompt, parent_prompt_id)
-    elif prompt.method == "dalle3":
-        images, reworded_prompt = dalle_image_gen(prompt)
+    if prompts[0].method == "stable-diffusion":
+        images = a1_image_gen(prompts, parent_prompt_id)
+    elif prompts[0].method == "dalle3":
+        images, reworded_prompt = dalle_image_gen(prompts[0])
         revised_prompt = reworded_prompt
-    return images, revised_prompt if prompt.method == "dalle3" else prompt.text
+    return images, revised_prompt if prompts[0].method == "dalle3" else prompts[0].text
 
 
 def calculate_font_size(caption):
@@ -121,20 +120,31 @@ def add_caption_to_image(img, caption, output_path):
     return new_img
 
 
-def batch_add_caption(generated_images, prompt):
+def batch_add_caption(generated_images, prompts):
     captioned_images = []
 
-    for generated_image in generated_images:
-        captioned_images.append(add_caption_to_image(generated_image, prompt.text, "temp.png"))
+    for i, generated_image in enumerate(generated_images):
+        text = prompts[i].text if len(prompts)>1 else prompts[0].text
+        captioned_images.append(add_caption_to_image(generated_image, text, "temp.png"))
     return captioned_images
 
 
-def text_to_image(prompt: Prompt, parent_prompt_id=None):
-    generated_images, revised_prompt = get_generation_from_api(prompt, parent_prompt_id)
+def batch_text_to_image(prompts, parent_prompt_id=None):
+    generated_images, revised_prompt = get_generation_from_api(prompts, parent_prompt_id)
     if len(generated_images) == 0:
         return [], ""
     # convert the b64 encoded images to PIL images
     generated_images = [Image.open(io.BytesIO(base64.b64decode(image))) for image in generated_images]
 
-    captioned_images = batch_add_caption(generated_images, prompt)
+    captioned_images = batch_add_caption(generated_images, prompts)
+    return captioned_images, revised_prompt
+
+def text_to_image(prompt, parent_prompt_id=None):
+    generated_images, revised_prompt = get_generation_from_api([prompt], parent_prompt_id)
+    if len(generated_images) == 0:
+        return [], ""
+    # convert the b64 encoded images to PIL images
+    generated_images = [Image.open(io.BytesIO(base64.b64decode(image))) for image in generated_images]
+
+    captioned_images = batch_add_caption(generated_images, [prompt])
     return captioned_images, revised_prompt

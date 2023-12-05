@@ -19,7 +19,7 @@ async def setup(bot):
 class ImageGen(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # bot.db.drop_tables([Prompt])
+        bot.db.drop_tables([Prompt])
         bot.db.create_tables([Prompt])
         self.app = Celery('tasks')
         print("Image Gen cog init")
@@ -37,72 +37,107 @@ class ImageGen(commands.Cog):
             await message.channel.send(f"Number of tasks in the queue: {num_tasks}")
             return
 
-        if message.content.startswith("!") and not message.content.startswith("!*"):
+        if message.attachments:
+            for attachment in message.attachments:
+                # Check if the attachment is a text file
+                if attachment.filename.endswith('.txt'):
+                    await self.create_gif_prompt_from_text_file_message(message)
+                    await message.add_reaction("🙄")
+                    return
+        if not message.content.startswith("!"):
+            return
+        if message.content.startswith("!*"):
+            return
 
-            # check for <1,2,3> syntax
-            # Pattern to find the bracketed section
-            bracket_pattern = re.compile(r"<(.*?)>")
-            bracket_match = bracket_pattern.search(message.content)
-            double_bracket_pattern = re.compile(r"<<(.*?)>>")
-            double_bracket_match = double_bracket_pattern.search(message.content)
 
+        # check for <1,2,3> syntax
+        # Pattern to find the bracketed section
+        bracket_pattern = re.compile(r"<(.*?)>")
+        bracket_match = bracket_pattern.search(message.content)
+        double_bracket_pattern = re.compile(r"<<(.*?)>>")
+        double_bracket_match = double_bracket_pattern.search(message.content)
 
+        try:
             if double_bracket_match:
-                words = double_bracket_match.group(1).split(",")
-                if len(words) == 2:
-                    words.append("1")
-
-                if len(words) != 3:
-                    await message.channel.send("invalid gif syntax, use <<from, to, step>> or <<from, to>>")
-                    return
-
-
-                # Convert each word to decimal
-                words = [Decimal(word.strip()) for word in words]
-
-                # Base message without the bracketed section
-                base_message = double_bracket_pattern.sub("{}", message.content)
-                full_prompt = base_message.format(words[0])
-                parent_prompt = None
-
-                # Use Decimal in the range-like function
-                current = words[0]
-                end = words[1]
-                step = words[2]
-                while current <= end:
-                    full_prompt = base_message.format(current)
-                    prompt = self.message_to_prompt(message, full_prompt,
-                                                    parent_prompt=parent_prompt)  # Replace with your method
-                    if not parent_prompt:
-                        parent_prompt = prompt
-                    prompt.seed = parent_prompt.seed
-                    prompt.save()
-
-                    current += step
-                tasks.create_text_to_image_task(parent_prompt)
+                await self.create_gif_prompt_from_message(message)
             elif bracket_match:
-                # Extract words within the brackets
-                words = bracket_match.group(1).split(",")
-                # Base message without the bracketed section
-                base_message = bracket_pattern.sub("{}", message.content)
-
-                # Iterate over each word and generate an image
-                for word in words:
-                    word = word.strip()
-                    full_prompt = base_message.format(word)
-                    prompt = self.message_to_prompt(message, full_prompt)  # Replace with your method
-                    tasks.create_text_to_image_task(prompt)
-
-
+                await self.create_image_multi_prompt_from_message(message)
             else:
-                try:
-                    prompt = self.message_to_prompt(message)
-                    tasks.create_text_to_image_task(prompt)
-                except Exception as e:
-                    await message.channel.send(str(e))
-                    await message.add_reaction("❌")
-                    return
-            await message.add_reaction("🙄")
+                prompt = self.message_to_prompt(message)
+                tasks.create_text_to_image_task(prompt)
+        except Exception as e:
+            await message.channel.send(str(e))
+            await message.add_reaction("❌")
+            return
+
+        await message.add_reaction("🙄")
+
+    async def create_gif_prompt_from_text_file_message(self, message):
+        # get the contents of the txt file
+        attachment = message.attachments[0]
+        attachment_content = await attachment.read()
+        attachment_content = attachment_content.decode("utf-8")
+        # split the contents by word
+        words = attachment_content.split()
+        window_size = len(words) - 30
+        parent_prompt = None
+        for i in range(len(words) - window_size + 1):
+            sliding_window_string = ' '.join(words[i:i + window_size])
+            prompt = self.message_to_prompt(message, sliding_window_string[:400],
+                                            parent_prompt=parent_prompt)  # Replace with your method
+            if not parent_prompt:
+                parent_prompt = prompt
+            prompt.seed = parent_prompt.seed
+            prompt.steps = 20
+            prompt.save()
+
+        tasks.create_text_to_image_task(parent_prompt)
+
+    async def create_image_multi_prompt_from_message(self, message):
+        bracket_pattern = re.compile(r"<(.*?)>")
+        bracket_match = bracket_pattern.search(message.content)
+        # Extract words within the brackets
+        words = bracket_match.group(1).split(",")
+        # Base message without the bracketed section
+        base_message = bracket_pattern.sub("{}", message.content)
+        # Iterate over each word and generate an image
+        for word in words:
+            word = word.strip()
+            full_prompt = base_message.format(word)
+            prompt = self.message_to_prompt(message, full_prompt)  # Replace with your method
+            tasks.create_text_to_image_task(prompt)
+
+    async def create_gif_prompt_from_message(self, message):
+        double_bracket_pattern = re.compile(r"<<(.*?)>>")
+        double_bracket_match = double_bracket_pattern.search(message.content)
+        words = double_bracket_match.group(1).split(",")
+        if len(words) == 2:
+            words.append("1")
+        if len(words) != 3:
+            await message.channel.send("invalid gif syntax, use <<from, to, step>> or <<from, to>>")
+            # return
+        # Convert each word to decimal
+        words = [Decimal(word.strip()) for word in words]
+        # Base message without the bracketed section
+        base_message = double_bracket_pattern.sub("{}", message.content)
+        full_prompt = base_message.format(words[0])
+        parent_prompt = None
+        # Use Decimal in the range-like function
+        current = words[0]
+        end = words[1]
+        step = words[2]
+        while current <= end:
+            full_prompt = base_message.format(current)
+            prompt = self.message_to_prompt(message, full_prompt,
+                                            parent_prompt=parent_prompt)  # Replace with your method
+            if not parent_prompt:
+                parent_prompt = prompt
+            prompt.seed = parent_prompt.seed
+            prompt.steps = 20
+            prompt.save()
+
+            current += step
+        tasks.create_text_to_image_task(parent_prompt)
 
     async def cog_load(self):
         print("ImageGen cog loaded")
@@ -118,7 +153,7 @@ class ImageGen(commands.Cog):
         steps, message_content = self.parse_steps(message_content)
         height, width, message_content = self.parse_size(message_content)
         quantity, message_content = self.parse_quantity(message_content)
-
+        quantity = quantity if quantity else 1
         attachment_urls = [attachment.url for attachment in message.attachments]
 
         method = "dalle3" if self.check_dalle(message) else "stable-diffusion"

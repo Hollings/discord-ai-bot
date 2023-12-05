@@ -11,3 +11,4 @@
 - An unhinged moderator that mutes users based on ✨vibes✨
 - Starboard functionality to save your favorite messages
 - An ELO ranking system to find the best starboard messages
+- GIF GENERATION
