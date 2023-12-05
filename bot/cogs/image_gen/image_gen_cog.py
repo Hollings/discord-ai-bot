@@ -19,7 +19,7 @@ async def setup(bot):
 class ImageGen(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        bot.db.drop_tables([Prompt])
+        # bot.db.drop_tables([Prompt])
         bot.db.create_tables([Prompt])
         self.app = Celery('tasks')
         print("Image Gen cog init")
@@ -27,6 +27,10 @@ class ImageGen(commands.Cog):
     # on message
     @Cog.listener("on_message")
     async def on_message(self, message):
+        if message.content == "!unstick":
+            tasks.queue_all_pending_prompts_task()
+            return
+
         if str(message.channel.id) not in self.bot.config["STABLE_DIFFUSION_CHANNEL_IDS"].split(","):
             return
 
@@ -112,10 +116,12 @@ class ImageGen(commands.Cog):
         double_bracket_match = double_bracket_pattern.search(message.content)
         words = double_bracket_match.group(1).split(",")
         if len(words) == 2:
-            words.append("1")
+            words.append("20")
+        if len(words) == 1:
+            words = ["0","20","20"]
         if len(words) != 3:
             await message.channel.send("invalid gif syntax, use <<from, to, step>> or <<from, to>>")
-            # return
+            return
         # Convert each word to decimal
         words = [Decimal(word.strip()) for word in words]
         # Base message without the bracketed section
@@ -125,7 +131,23 @@ class ImageGen(commands.Cog):
         # Use Decimal in the range-like function
         current = words[0]
         end = words[1]
-        step = words[2]
+
+        def count_decimal_places(number):
+            number_str = str(number)
+            if '.' in number_str:
+                return len(number_str.split('.')[1])
+            return 0
+
+        current_decimal_places = count_decimal_places(current)
+        end_decimal_places = count_decimal_places(end)
+
+        max_decimal_places = max(current_decimal_places, end_decimal_places) + 2
+
+        frames = words[2]
+        rounding_format = '0.' + '0' * max_decimal_places
+        frames = Decimal((end - current) / frames).quantize(Decimal(rounding_format))
+        frames = Decimal(str(frames).rstrip('0').rstrip('.'))
+
         while current <= end:
             full_prompt = base_message.format(current)
             prompt = self.message_to_prompt(message, full_prompt,
@@ -136,7 +158,7 @@ class ImageGen(commands.Cog):
             prompt.steps = 20
             prompt.save()
 
-            current += step
+            current += frames
         tasks.create_text_to_image_task(parent_prompt)
 
     async def cog_load(self):
@@ -180,7 +202,7 @@ class ImageGen(commands.Cog):
 
         return new_prompt
 
-    def check_dalle(self, message: Message, minutes=45):
+    def check_dalle(self, message: Message, minutes=30):
         if "$$$" not in message.content:
             return False
         user_id = str(message.author.id)
@@ -203,7 +225,7 @@ class ImageGen(commands.Cog):
             last_prompt_time = (Prompt.select(Prompt.created_at)
                                 .where((Prompt.user_id == user_id) &
                                        (Prompt.method == "dalle3"))
-                                .order_by(Prompt.created_at.desc())
+                                .order_by(Prompt.created_at.asc())
                                 .get()).created_at
 
             next_available_time = last_prompt_time + datetime.timedelta(minutes=minutes)

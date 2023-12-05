@@ -27,12 +27,13 @@ async def send_sleep_emoji(*, client, prompt_id):
         await message.add_reaction("🥱")
 
 async def generate_gif_from_prompt(*, client: discord.Client, prompt_id):
-    # get prompt children
-
-    prompt = Prompt.get(Prompt.id == prompt_id)
+    try:
+        prompt = Prompt.get(Prompt.id == prompt_id)
+    except Prompt.DoesNotExist:
+        return
     if prompt.status != "pending":
         return
-    # send the gif in the channel
+
     channel = await client.fetch_channel(prompt.channel_id)
     message = await channel.fetch_message(prompt.message_id)
     await message.add_reaction("🤔")
@@ -43,10 +44,11 @@ async def generate_gif_from_prompt(*, client: discord.Client, prompt_id):
     prompt.status = "working"
     prompt.save()
 
-    frames = []
     message = await channel.fetch_message(prompt.message_id)
     prompts = [prompt, *children]
+
     image_list, _ = txt2img.batch_text_to_image(prompts, parent_prompt_id=prompt.id)
+    frames = []
     for index, image in enumerate(image_list):
         frames.append(image)
 
@@ -69,7 +71,10 @@ async def generate_gif_from_prompt(*, client: discord.Client, prompt_id):
 
 
 async def generate_image_from_prompt(*, client: discord.Client, prompt_id):
-    prompt = Prompt.get(Prompt.id == prompt_id)
+    try:
+        prompt = Prompt.get(Prompt.id == prompt_id)
+    except Prompt.DoesNotExist:
+        return
     if prompt.status != "pending":
         return
     prompt.status = "working"
@@ -183,9 +188,15 @@ def text_to_gif_task(prompt_id):
 @app.task(name='queue_all_pending_prompts_task')
 def queue_all_pending_prompts_task():
     # get all prompts that are PENDING
-    prompts = Prompt.select().where(
-        (Prompt.status == "pending") | (Prompt.status == "working")
-    )
+    try:
+        prompts = Prompt.select().where(
+            ((Prompt.status == "pending") | (Prompt.status == "working")) &
+            Prompt.parent_prompt_id.is_null(True)
+        )
+    except Exception as e:
+        print("Error getting prompts: " + str(e))
+        return
+    print("Queueing " + str(len(prompts)) + " prompts")
     for prompt in prompts:
         create_text_to_image_task(prompt)
 
@@ -193,6 +204,7 @@ def queue_all_pending_prompts_task():
 
 @worker_process_init.connect
 def on_worker_init(**_):
+    print("Worker process initialized, queueing all pending prompts")
     queue_all_pending_prompts_task.delay()
 
 

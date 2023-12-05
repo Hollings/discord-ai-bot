@@ -124,7 +124,10 @@ def batch_add_caption(generated_images, prompts):
     captioned_images = []
 
     for i, generated_image in enumerate(generated_images):
-        text = prompts[i].text if len(prompts)>1 else prompts[0].text
+        try:
+            text = prompts[i].text if len(prompts)>1 else prompts[0].text
+        except IndexError:
+            text = "something went wrong"
         captioned_images.append(add_caption_to_image(generated_image, text, "temp.png"))
     return captioned_images
 
