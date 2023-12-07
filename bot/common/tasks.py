@@ -35,14 +35,23 @@ async def generate_gif_from_prompt(*, client: discord.Client, prompt_id):
         return
 
     channel = await client.fetch_channel(prompt.channel_id)
-    message = await channel.fetch_message(prompt.message_id)
-    await message.add_reaction("🤔")
     children = Prompt.select().where(Prompt.parent_prompt_id == prompt.id).order_by(Prompt.id)
     for child in children:
         child.status = "working"
         child.save()
     prompt.status = "working"
     prompt.save()
+    try:
+        message = await channel.fetch_message(prompt.message_id)
+    except discord.NotFound:
+        for child in children:
+            child.status = "complete"
+            child.save()
+        prompt.status = "complete"
+        prompt.save()
+        return
+
+    await message.add_reaction("🤔")
 
     message = await channel.fetch_message(prompt.message_id)
     prompts = [prompt, *children]
@@ -53,15 +62,17 @@ async def generate_gif_from_prompt(*, client: discord.Client, prompt_id):
         frames.append(image)
 
     frame_duration = 200
-    saved_image = frames[0].save('output.gif', save_all=True, append_images=frames[1:], loop=0, duration=frame_duration, optimize=True)
+    filename = f'seed-{prompt.seed}-{prompt.id}.gif'
+    saved_image = frames[0].save(filename, save_all=True, append_images=frames[1:], loop=0, duration=frame_duration, optimize=False)
 
 
     await message.remove_reaction("🤔", client.user)
     await message.add_reaction("✅")
-    await message.channel.send(file=File('output.gif'))
+    message = await message.channel.send(file=File(filename))
 
     # mark prompt as done
     prompt.status = "done"
+    prompt.output_message_id = message.id
     prompt.save()
     for child in children:
         child.status = "done"

@@ -6,7 +6,7 @@ import re
 import openai
 from discord import Message
 from discord.ext import commands
-from discord.ext.commands import Cog
+from discord.ext.commands import Cog, Context
 
 
 async def setup(bot):
@@ -47,19 +47,26 @@ class GptChat(commands.Cog):
             return
 
         # send typing indicator
-        typing_task = asyncio.create_task(self.send_typing_indicator_delayed(message))
+        ctx = await self.bot.get_context(message)
+
+        typing_task = asyncio.create_task(self.send_typing_indicator_delayed(ctx))
         message_content_task = asyncio.create_task(self.get_gpt_chat_response(message))
         content = await message_content_task
         # Wait for the typing task to complete if it's still running
         typing_task.cancel()
-        await message.channel.send(content)
+        if content:
+            await message.channel.send(content)
 
 
-    async def send_typing_indicator_delayed(self, message):
-        timer = asyncio.sleep(1)
-        async with message.channel.typing():
-            await asyncio.sleep(20)
-            await timer
+    async def send_typing_indicator_delayed(self, ctx: Context):
+        timer = asyncio.sleep(2)
+        await timer
+        try:
+            for i in range(15):
+                async with ctx.channel.typing():
+                    await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            pass
 
     async def cog_load(self):
         print("GPT Chat cog loaded")
