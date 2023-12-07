@@ -2,6 +2,7 @@ import asyncio
 import json
 import random
 import re
+from pathlib import Path
 
 import openai
 from discord import Message
@@ -14,9 +15,21 @@ async def setup(bot):
 
 
 class GptChat(commands.Cog):
+
     def __init__(self, bot):
         self.bot = bot
+        # if systemprompt.txt doesnt exist, create it
+        if not Path("systemprompt.txt").is_file():
+            open("systemprompt.txt", "w").close()
+
+        # load the "systemprompt.txt" file into the system prompt config
+        self.bot.config["SYSTEM_PROMPT"] = open("systemprompt.txt", "r").read()
         print("GPT Chat cog init")
+
+    def set_system_prompt(self, system_prompt):
+        self.bot.config["SYSTEM_PROMPT"] = system_prompt
+        overwrite_file = open("systemprompt.txt", "w")
+        overwrite_file.write(system_prompt)
 
     # on message
     @Cog.listener("on_message")
@@ -37,8 +50,8 @@ class GptChat(commands.Cog):
         if message.content.startswith("!system "):
             system_prompt = message.content.replace("!system", "").strip()
             if system_prompt == "reset":
-                system_prompt = ""
-            self.bot.config["SYSTEM_PROMPT"] = system_prompt
+                self.set_system_prompt("")
+            self.set_system_prompt(system_prompt)
             await message.channel.send("Current System Prompt: ```" + self.bot.config.get("SYSTEM_PROMPT", "(none)") + "```")
             return
 
