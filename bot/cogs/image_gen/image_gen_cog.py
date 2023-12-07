@@ -181,6 +181,8 @@ class ImageGen(commands.Cog):
         message_id = message.id  # Get message id
         message_content = prompt_text_override if prompt_text_override else message.content  # Get message content
 
+
+
         message_content, modifiers = self.parse_modifiers(message_content, message)
         attachment_urls = [attachment.url for attachment in message.attachments]
         method = "dalle3" if modifiers['dalle'] else "stable-diffusion"
@@ -260,6 +262,19 @@ class ImageGen(commands.Cog):
         return message_content, modifiers
 
     def parse_seed(self, message_content, modifiers, message=None):
+
+        # get the filename of the referenced image
+        ref = message.reference
+        if ref:
+            ref_message = ref.resolved
+            if ref_message:
+                if ref_message.attachments:
+                    match = re.search(r"seed-(\d+)", ref_message.attachments[0].filename)
+                    if match:
+                        seed_number = match.group(1)
+                        modifiers['seed'] = seed_number
+                        return message_content, modifiers
+
         if message_content.startswith('%'):
             modifiers['seed'] = 69420
             message_content = message_content[1:]
