@@ -10,6 +10,7 @@ async def setup(bot):
 class Starboard(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.seen_ids = []
 
     @Cog.listener("on_raw_reaction_add")
     async def on_raw_reaction_add(self, payload):
@@ -18,6 +19,9 @@ class Starboard(commands.Cog):
 
         # get the message from the payload
         message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
+
+        if message.id in self.seen_ids:
+            return
 
         # if the message is in the starboard channel, return
         if message.channel == starboard_channel:
@@ -38,5 +42,5 @@ class Starboard(commands.Cog):
 
         link = message.attachments[
             0].url if message.attachments else f"> **{message.author.name}**: {message.content}"
-
+        self.seen_ids.append(message.id)
         await starboard_channel.send(f"{message.jump_url}\n{link}")
