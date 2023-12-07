@@ -1,6 +1,7 @@
 import datetime
 import random
 import re
+import sys
 
 from decimal import Decimal
 from celery import Celery
@@ -78,7 +79,11 @@ class ImageGen(commands.Cog):
                 prompt = self.message_to_prompt(message)
                 tasks.create_text_to_image_task(prompt)
         except Exception as e:
-            await message.channel.send(str(e))
+            # get full dump
+            _, _, tb = sys.exc_info()
+            file_name = tb.tb_frame.f_code.co_filename
+            line_number = tb.tb_lineno
+            await message.channel.send(f"Exception occurred at {file_name}:{line_number}\n\n{e}")
             await message.add_reaction("❌")
             return
 
