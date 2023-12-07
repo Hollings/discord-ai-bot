@@ -87,7 +87,7 @@ class GptChat(commands.Cog):
     async def get_gpt_chat_response(self, message: Message):
         openai.api_key = self.bot.config['OPENAI_API_KEY']
 
-        messages = [message async for message in message.channel.history(limit=5)]
+        messages = [message async for message in message.channel.history(limit=15)]
         formatted_messages = self.format_chat_history(messages, self.bot.config.get("SYSTEM_PROMPT", ""))
         # Make the API request
         response = openai.chat.completions.create(

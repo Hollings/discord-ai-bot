@@ -34,7 +34,6 @@ class GptVision(commands.Cog):
             typing_task.cancel()
             await message.channel.send(content)
 
-
     async def send_typing_indicator_delayed(self, ctx: Context):
         timer = asyncio.sleep(2)
         await timer
@@ -51,20 +50,25 @@ class GptVision(commands.Cog):
     async def get_gpt_vision_response(self, message: Message):
         openai.api_key = self.bot.config['OPENAI_API_KEY']
 
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": message.content},
+                    {
+                        "type": "image_url",
+                        "image_url": f"{message.attachments[0].url}"
+                    },
+                ],
+            }
+        ]
+
+        if self.bot.config["SYSTEM_PROMPT"]:
+            messages.insert(0, {"role": "system", "content": self.bot.config["SYSTEM_PROMPT"]})
+
         response = openai.chat.completions.create(
             model="gpt-4-vision-preview",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": message.content},
-                        {
-                            "type": "image_url",
-                            "image_url": f"{message.attachments[0].url}"
-                        },
-                    ],
-                }
-            ],
+            messages=messages,
             max_tokens=500,
         )
         response_text = response.choices[0].message.content
