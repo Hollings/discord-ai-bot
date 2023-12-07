@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import json
 import random
 import re
@@ -9,6 +10,8 @@ from discord import Message
 from discord.ext import commands
 from discord.ext.commands import Cog, Context
 
+from cogs.gpt_chat.system_prompt import SystemPrompt
+
 
 async def setup(bot):
     gpt_chat = GptChat(bot)
@@ -18,18 +21,40 @@ class GptChat(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        # if systemprompt.txt doesnt exist, create it
-        if not Path("systemprompt.txt").is_file():
-            open("systemprompt.txt", "w").close()
-
+        bot.db.create_tables([SystemPrompt])
+        self.set_system_prompt()
         # load the "systemprompt.txt" file into the system prompt config
         self.bot.config["SYSTEM_PROMPT"] = open("systemprompt.txt", "r").read()
         print("GPT Chat cog init")
 
-    def set_system_prompt(self, system_prompt):
+    def set_new_random_system_prompt(self):
+        # get a random inactive system prompt
+        system_prompt = SystemPrompt.get(SystemPrompt.active_on.is_null(True))
+        # set it active
+        system_prompt.set_active()
+        self.bot.config["SYSTEM_PROMPT"] = system_prompt.content
+
+    def set_system_prompt(self, system_prompt=None):
+        # if none is sent, get the current active one
+        if system_prompt is None:
+            try:
+                system_prompt = SystemPrompt.get(SystemPrompt.active_on.is_null(False)).content
+            except SystemPrompt.DoesNotExist:
+                SystemPrompt.create(content="").set_active()
+                system_prompt = ""
+
+        # if one is set, create a new one and set it active, then set the old one to inactive
+        else:
+            SystemPrompt.create(content=system_prompt).set_active()
+
+        # set the config to be used elsewhere
         self.bot.config["SYSTEM_PROMPT"] = system_prompt
-        overwrite_file = open("systemprompt.txt", "w")
-        overwrite_file.write(system_prompt)
+
+    def check_system_prompt_last_set_time(self):
+        # if the system prompt was set more than an hour ago, set a new one
+        system_prompt = SystemPrompt.get(SystemPrompt.active_on.is_null(False))
+        if system_prompt.active_on < datetime.datetime.now() - datetime.timedelta(hours=1):
+            self.set_new_random_system_prompt()
 
     # on message
     @Cog.listener("on_message")
@@ -49,9 +74,10 @@ class GptChat(commands.Cog):
 
         if message.content.startswith("!system "):
             system_prompt = message.content.replace("!system", "").strip()
-            if system_prompt == "reset":
-                self.set_system_prompt("")
-            self.set_system_prompt(system_prompt)
+            if system_prompt == "roll":
+                self.set_new_random_system_prompt()
+            else:
+                self.set_system_prompt(system_prompt)
             await message.channel.send("Current System Prompt: ```" + self.bot.config.get("SYSTEM_PROMPT", "(none)") + "```")
             return
 
@@ -59,7 +85,8 @@ class GptChat(commands.Cog):
             # let the gpt-v cog handle this
             return
 
-        # send typing indicator
+        self.check_system_prompt_last_set_time()
+
         ctx = await self.bot.get_context(message)
 
         typing_task = asyncio.create_task(self.send_typing_indicator_delayed(ctx))
