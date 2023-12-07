@@ -100,7 +100,6 @@ class ImageGen(commands.Cog):
             if not parent_prompt:
                 parent_prompt = prompt
             prompt.seed = parent_prompt.seed
-            prompt.steps = 20
             prompt.save()
 
         tasks.create_text_to_image_task(parent_prompt)
@@ -163,7 +162,6 @@ class ImageGen(commands.Cog):
             if not parent_prompt:
                 parent_prompt = prompt
             prompt.seed = parent_prompt.seed
-            prompt.steps = 20
             prompt.save()
 
             current += frames
@@ -238,7 +236,7 @@ class ImageGen(commands.Cog):
                 raise Exception(
                     f"Dalle is on cooldown for {message.author.nick}. Try again in {readable_time[0]:.0f} minutes and {readable_time[1]:.0f} seconds.")
         modifiers['dalle'] = True
-        return message_content[:2], modifiers
+        return message_content[3:], modifiers
 
     def parse_quantity(self, message_content, modifiers, message=None):
         if message_content.startswith('!'):
@@ -261,10 +259,8 @@ class ImageGen(commands.Cog):
             modifiers['seed'] = 69420
             message_content = message_content[1:]
         elif message_content.startswith('{') and '}' in message_content:
-            print("MESSAGE CONTENT: " + message_content)
             # Use regular expression to find a number enclosed in curly brackets and the rest of the string
             match = re.search(r'\{(\d+)\}(.*)', message_content)
-            print("MATCH: " + str(match))
             if match:
                 # Extract the number and set it as the seed in modifiers
                 number = int(match.group(1))
@@ -301,7 +297,6 @@ class ImageGen(commands.Cog):
             modifiers['steps'] -= 2
             modifiers['steps'] = max(1, modifiers['steps'])
             message_content = message_content[1:]
-
         return message_content, modifiers
 
 
@@ -318,7 +313,6 @@ class ImageGen(commands.Cog):
             original_value = modifiers.copy()
             for modifier_method in self.modifier_methods:
                 message_content, modifiers = modifier_method(message_content=message_content, modifiers=modifiers, message=message)
-            print(message_content)
 
             if modifiers == original_value:
                 break
