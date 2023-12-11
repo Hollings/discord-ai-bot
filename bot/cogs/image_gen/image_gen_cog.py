@@ -83,7 +83,8 @@ class ImageGen(commands.Cog):
             _, _, tb = sys.exc_info()
             file_name = tb.tb_frame.f_code.co_filename
             line_number = tb.tb_lineno
-            await message.channel.send(f"Exception occurred at {file_name}:{line_number}\n\n{e}")
+            print("Exception occurred at {file_name}:{line_number}\n\n{e}")
+            await message.channel.send(f"{e}")
             await message.add_reaction("❌")
             return
 
@@ -143,6 +144,7 @@ class ImageGen(commands.Cog):
         # Use Decimal in the range-like function
         current = words[0]
         end = words[1]
+        frames = words[2]
 
         def count_decimal_places(number):
             number_str = str(number)
@@ -155,7 +157,6 @@ class ImageGen(commands.Cog):
 
         max_decimal_places = max(current_decimal_places, end_decimal_places) + 2
 
-        frames = words[2]
         rounding_format = '0.' + '0' * max_decimal_places
         frames = Decimal((end - current) / frames).quantize(Decimal(rounding_format))
         frames = Decimal(str(frames).rstrip('0').rstrip('.'))
@@ -167,6 +168,7 @@ class ImageGen(commands.Cog):
             if not parent_prompt:
                 parent_prompt = prompt
             prompt.seed = parent_prompt.seed
+            prompt.quantity = 1
             prompt.save()
 
             current += frames
@@ -229,16 +231,23 @@ class ImageGen(commands.Cog):
 
         if prompt_count >= 3:
             # Calculate the time until the user can use Dalle again
-            last_prompt_time = (Prompt.select(Prompt.created_at)
-                                .where((Prompt.user_id == user_id) &
-                                       (Prompt.method == "dalle3"))
-                                .order_by(Prompt.created_at.asc())
-                                .get()).created_at
+            # Fetch the last three prompts
+            last_prompts = (Prompt.select(Prompt.created_at)
+                            .where((Prompt.user_id == user_id) &
+                                   (Prompt.method == "dalle3"))
+                            .order_by(Prompt.created_at.desc())
+                            .limit(3))
+
+            # Extract the created_at attribute from the third prompt
+            if len(last_prompts) >= 3:
+                last_prompt_time = last_prompts[2].created_at
+            else:
+                last_prompt_time = None  # or some default value
 
             next_available_time = last_prompt_time + datetime.timedelta(minutes=minutes)
             remaining_time = next_available_time - datetime.datetime.now()
             readable_time = divmod(remaining_time.total_seconds(), minutes)
-
+            print( f"Dalle is on cooldown for {message.author.nick}. Try again in {readable_time[0]:.0f} minutes and {readable_time[1]:.0f} seconds.")
             if remaining_time.total_seconds() > 0:
                 raise Exception(
                     f"Dalle is on cooldown for {message.author.nick}. Try again in {readable_time[0]:.0f} minutes and {readable_time[1]:.0f} seconds.")

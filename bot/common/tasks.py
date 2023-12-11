@@ -36,6 +36,10 @@ async def generate_gif_from_prompt(*, client: discord.Client, prompt_id):
 
     channel = await client.fetch_channel(prompt.channel_id)
     children = Prompt.select().where(Prompt.parent_prompt_id == prompt.id).order_by(Prompt.id)
+
+    if len(children) >100:
+        children = children[:100]
+
     for child in children:
         child.status = "working"
         child.save()
@@ -115,14 +119,14 @@ async def generate_image_from_prompt(*, client: discord.Client, prompt_id):
         prompt.status = "complete"
         prompt.save()
         return
-    for captioned_image in captioned_images:
+    for i, captioned_image in enumerate(captioned_images):
         # Save PIL image to BytesIO object
         image_byte_arr = io.BytesIO()
         captioned_image.save(image_byte_arr, format='PNG')
         image_byte_arr.seek(0)
 
         # Send image to Discord channel
-        discord_file = File(fp=image_byte_arr, filename='seed-'+str(prompt.seed)+'.png')
+        discord_file = File(fp=image_byte_arr, filename='seed-'+str(prompt.seed + i)+'.png')
 
         if prompt.method == "dalle3":
             content = "> " + revised_prompt

@@ -11,6 +11,7 @@ from discord.ext import commands
 from discord.ext.commands import Cog, Context
 
 from cogs.gpt_chat.system_prompt import SystemPrompt
+from peewee import fn
 
 
 async def setup(bot):
@@ -29,7 +30,7 @@ class GptChat(commands.Cog):
 
     def set_new_random_system_prompt(self):
         # get a random inactive system prompt
-        system_prompt = SystemPrompt.get(SystemPrompt.active_on.is_null(True))
+        system_prompt = SystemPrompt.select().where(SystemPrompt.active_on.is_null(True)).order_by(fn.Random()).limit(1).get()
         # set it active
         system_prompt.set_active()
         self.bot.config["SYSTEM_PROMPT"] = system_prompt.content
