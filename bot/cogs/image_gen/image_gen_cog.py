@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime, timedelta
 import random
 import re
 import sys
@@ -212,45 +212,36 @@ class ImageGen(commands.Cog):
     def check_dalle(self, message_content, modifiers, message=None):
         if not message_content.startswith("$$$") or not message:
             return message_content, modifiers
-
-
         user_id = str(message.author.id)
-        minutes = 30 #todo use a setting here
-        one_hour_ago = datetime.datetime.now() - datetime.timedelta(minutes=minutes)
-
+        minutes = 30  # TODO: use a setting here
         try:
-            prompt_count = (Prompt.select()
-                            .where((Prompt.user_id == user_id) &
-                                   (Prompt.method == "dalle3") &
-                                   (Prompt.created_at > one_hour_ago))
-                            .count())
+            current_time = datetime.utcnow()
+            one_hour_ago = current_time - timedelta(minutes=minutes)
+
+            prompt_count = Prompt.select().where(
+                (Prompt.user_id == user_id) &
+                (Prompt.method == "dalle3") &
+                (Prompt.created_at > one_hour_ago)
+            ).count()
+
+            if prompt_count >= 3:
+                last_prompts = Prompt.select(Prompt.created_at).where(
+                    (Prompt.user_id == user_id) &
+                    (Prompt.method == "dalle3")
+                ).order_by(Prompt.created_at.desc()).limit(3)
+
+                if len(last_prompts) >= 3:
+                    remaining_time = last_prompts[2].created_at + timedelta(minutes=minutes) - current_time
+                    if remaining_time.total_seconds() > 0:
+                        readable_time = divmod(remaining_time.total_seconds(), 60)
+                        raise Exception(
+                            f"Dalle is on cooldown for {message.author.nick}. Try again in "
+                            f"{int(readable_time[0])} minutes and {int(readable_time[1])} seconds."
+                        )
 
         except Exception as e:
-            # Handle any other exceptions
             raise e
 
-        if prompt_count >= 3:
-            # Calculate the time until the user can use Dalle again
-            # Fetch the last three prompts
-            last_prompts = (Prompt.select(Prompt.created_at)
-                            .where((Prompt.user_id == user_id) &
-                                   (Prompt.method == "dalle3"))
-                            .order_by(Prompt.created_at.desc())
-                            .limit(3))
-
-            # Extract the created_at attribute from the third prompt
-            if len(last_prompts) >= 3:
-                last_prompt_time = last_prompts[2].created_at
-            else:
-                last_prompt_time = None  # or some default value
-
-            next_available_time = last_prompt_time + datetime.timedelta(minutes=minutes)
-            remaining_time = next_available_time - datetime.datetime.now()
-            readable_time = divmod(remaining_time.total_seconds(), minutes)
-            print( f"Dalle is on cooldown for {message.author.nick}. Try again in {readable_time[0]:.0f} minutes and {readable_time[1]:.0f} seconds.")
-            if remaining_time.total_seconds() > 0:
-                raise Exception(
-                    f"Dalle is on cooldown for {message.author.nick}. Try again in {readable_time[0]:.0f} minutes and {readable_time[1]:.0f} seconds.")
         modifiers['dalle'] = True
         return message_content[3:], modifiers
 
