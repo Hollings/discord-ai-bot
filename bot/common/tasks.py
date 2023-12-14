@@ -1,12 +1,14 @@
 import asyncio
 import base64
 import io
+import logging
 
+import aiohttp
 import discord
 import requests
 from celery import Celery
 from common import celery_config
-from discord import File
+from discord import File, Message
 from celery.signals import worker_process_init
 from dotenv import dotenv_values
 from cogs.image_gen.prompt import Prompt
@@ -16,6 +18,7 @@ from PIL import Image
 app = Celery('tasks')
 app.config_from_object(celery_config)
 config = dotenv_values('.env')
+logger = logging.getLogger(__name__)
 
 async def send_sleep_emoji(*, client, prompt_id):
     prompt= Prompt.get(Prompt.id == prompt_id)
@@ -23,8 +26,11 @@ async def send_sleep_emoji(*, client, prompt_id):
     message = await channel.fetch_message(prompt.message_id)
     # send the sleepy guy emoji
     # if the sleepy guy emoji isnt already there, add it
-    if not any(reaction.emoji == "🥱" for reaction in message.reactions):
-        await message.add_reaction("🥱")
+    # remove thinking reaction
+    if any(reaction.emoji == "🤔" for reaction in message.reactions):
+        await message.remove_reaction("🤔", client.user)
+    if not any(reaction.emoji == "😴" for reaction in message.reactions):
+        await message.add_reaction("😴")
 
 async def generate_gif_from_prompt(*, client: discord.Client, prompt_id):
     try:
@@ -60,19 +66,30 @@ async def generate_gif_from_prompt(*, client: discord.Client, prompt_id):
     message = await channel.fetch_message(prompt.message_id)
     prompts = [prompt, *children]
 
-    image_list, _ = txt2img.batch_text_to_image(prompts, parent_prompt_id=prompt.id)
+    #start the update process
+    progress_message = await channel.send("`"+prompt.text+"`")
+    update_task = asyncio.create_task(update_progress_bar_until_canceled(progress_message, prompt))
+    image_list, _ = await txt2img.batch_text_to_image(prompts, parent_prompt_id=prompt.id)
+    update_task.cancel()
+
+    #end the process
     frames = []
     for index, image in enumerate(image_list):
         frames.append(image)
 
     frame_duration = 200
     filename = f'seed-{prompt.seed}-{prompt.id}.gif'
-    saved_image = frames[0].save(filename, save_all=True, append_images=frames[1:], loop=0, duration=frame_duration, optimize=False)
+    saved_image = frames[0].save(filename, save_all=True, append_images=frames[1:], loop=0, duration=frame_duration, optimize=True)
 
 
     await message.remove_reaction("🤔", client.user)
     await message.add_reaction("✅")
     message = await message.channel.send(file=File(filename))
+
+    try:
+        await progress_message.delete()
+    except discord.NotFound:
+        pass
 
     # mark prompt as done
     prompt.status = "done"
@@ -90,8 +107,9 @@ async def generate_image_from_prompt(*, client: discord.Client, prompt_id):
         prompt = Prompt.get(Prompt.id == prompt_id)
     except Prompt.DoesNotExist:
         return
-    if prompt.status != "pending":
+    if prompt.status != "pending" or prompt.status == "working":
         return
+    logger.info("GENERATING PROMPT " + str(prompt_id))
     prompt.status = "working"
     prompt.save()
     channel = await client.fetch_channel(prompt.channel_id)
@@ -103,7 +121,7 @@ async def generate_image_from_prompt(*, client: discord.Client, prompt_id):
         return
     await message.add_reaction("🤔")
     try:
-        captioned_images, revised_prompt = txt2img.text_to_image(prompt)
+        captioned_images, revised_prompt = await txt2img.text_to_image(prompt)
     except Exception as e:
         captioned_images = []
         await message.remove_reaction("🤔", client.user)
@@ -161,7 +179,7 @@ async def run_method_with_bot(the_method, **kwargs):
 
 
 def create_text_to_image_task(prompt: Prompt):
-    print("Creating task for prompt " + str(prompt.id) + " with method " + prompt.method)
+    logger.info("Creating task for prompt " + str(prompt.text) + " with method " + prompt.method)
     # check if the prompt has any children
     children = Prompt.select().where(Prompt.parent_prompt_id == prompt.id)
     if len(children) > 0:
@@ -173,12 +191,14 @@ def create_text_to_image_task(prompt: Prompt):
     else:
         print("Invalid method")
 
-@app.task(bind=True, name='text_to_image_task_local', queue='local', max_retries=None, default_retry_delay=30)
+@app.task(bind=True, name='text_to_image_task_local', queue='local', max_retries=None, default_retry_delay=60)
 def text_to_image_task_local(self, prompt_id):
+    logger.info("Running task for prompt " + str(prompt_id))
     try:
         # check http://localhost:7860/internal/ping for a response
         response = requests.get(f"{config['GRADIO_API_BASE_URL']}internal/ping")
         if response.status_code != 200:
+
             raise Exception("Local server not running")
         asyncio.run(run_method_with_bot(generate_image_from_prompt, prompt_id=prompt_id))
     except Exception as e:
@@ -189,15 +209,24 @@ def text_to_image_task_local(self, prompt_id):
 @app.task(name='text_to_image_task_api', queue='api')
 def text_to_image_task_api(prompt_id):
     print("AAAAA")
-    asyncio.run(
-        run_method_with_bot(generate_image_from_prompt, prompt_id=prompt_id))
+    try:
+        asyncio.run(
+            run_method_with_bot(generate_image_from_prompt, prompt_id=prompt_id))
+    except Exception as e:
+        print("Error running gif task: " + str(e))
+        return
+
 
 
 @app.task(name='text_to_gif_task', queue='local')
 def text_to_gif_task(prompt_id):
     print("AAAAA")
-    asyncio.run(
-        run_method_with_bot(generate_gif_from_prompt, prompt_id=prompt_id))
+    try:
+        asyncio.run(
+            run_method_with_bot(generate_gif_from_prompt, prompt_id=prompt_id))
+    except Exception as e:
+        print("Error running gif task: " + str(e))
+        return
 
 
 @app.task(name='queue_all_pending_prompts_task')
@@ -211,8 +240,9 @@ def queue_all_pending_prompts_task():
     except Exception as e:
         print("Error getting prompts: " + str(e))
         return
-    print("Queueing " + str(len(prompts)) + " prompts")
+    logger.info("Queueing " + str(len(prompts)) + " prompts")
     for prompt in prompts:
+        print("Queueing prompt " + str(prompt.text))
         create_text_to_image_task(prompt)
 
 
@@ -220,7 +250,52 @@ def queue_all_pending_prompts_task():
 @worker_process_init.connect
 def on_worker_init(**_):
     print("Worker process initialized, queueing all pending prompts")
-    queue_all_pending_prompts_task.delay()
+    # queue_all_pending_prompts_task()
 
 
+
+@app.task(queue='local')
+def clear_queue():
+    with app.connection_or_acquire() as conn:
+        app.control.discard_all(connection=conn)
+
+
+def create_progress_bar(percentage, bar_length=10, filled_char='█', empty_char='░'):
+    """
+    Create an ASCII progress bar.
+
+    :param percentage: The completion percentage as a decimal (0 to 1).
+    :param bar_length: The total length of the progress bar in characters.
+    :param filled_char: The character used to represent filled portion.
+    :param empty_char: The character used to represent empty portion.
+    :return: A string representing the progress bar.
+    """
+    filled_length = int(bar_length * percentage)
+    bar = filled_char * filled_length + empty_char * (bar_length - filled_length)
+    return f"[{bar}]"
+
+async def update_progress_bar_until_canceled(message, prompt):
+
+    async def fetch(session, url):
+        async with session.get(url) as response:
+            return await response.json()
+
+    started = False
+    async with aiohttp.ClientSession() as session:
+        for i in range(0, 100):
+            logger.info("Updating progress bar for prompt " + str(prompt.text))
+            await asyncio.sleep(5)
+            response = await fetch(session, config['GRADIO_API_BASE_URL'] + 'sdapi/v1/progress')
+            # edit message with progress bar
+            if response['progress'] != 0.0:
+                started = True
+            if response['progress'] == 0.0 and started:
+                # delete the message
+                await message.delete()
+                return
+            if response['progress'] > 0.0:
+                progress_bar = create_progress_bar(response['progress'], bar_length=len(prompt.text))
+                progress_message = f"""`{prompt.text}`
+`{progress_bar}`"""
+                await message.edit(content=progress_message)
 

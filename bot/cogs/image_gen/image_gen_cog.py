@@ -4,6 +4,8 @@ import re
 import sys
 
 from decimal import Decimal
+
+import requests
 from celery import Celery
 from discord import Message
 from discord.ext import commands
@@ -11,7 +13,6 @@ from discord.ext.commands import Cog
 
 from common import tasks
 from cogs.image_gen.prompt import Prompt, PromptStatus
-
 
 async def setup(bot):
     image_gen = ImageGen(bot)
@@ -37,8 +38,10 @@ class ImageGen(commands.Cog):
     @Cog.listener("on_message")
     async def on_message(self, message):
         if message.content == "!unstick":
+            tasks.clear_queue()
             tasks.queue_all_pending_prompts_task()
             return
+
 
         if str(message.channel.id) not in self.bot.config["STABLE_DIFFUSION_CHANNEL_IDS"].split(","):
             return
@@ -137,6 +140,8 @@ class ImageGen(commands.Cog):
             return
         # Convert each word to decimal
         words = [Decimal(word.strip()) for word in words]
+        if words[2] > 100:
+            words[2] = Decimal(100)
         # Base message without the bracketed section
         base_message = double_bracket_pattern.sub("{}", message.content)
         full_prompt = base_message.format(words[0])
@@ -338,3 +343,4 @@ class ImageGen(commands.Cog):
                 break
 
         return message_content, modifiers
+

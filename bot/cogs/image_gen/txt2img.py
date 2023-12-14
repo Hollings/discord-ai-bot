@@ -2,6 +2,7 @@ import base64
 import random
 import textwrap
 
+import aiohttp
 import openai
 import requests
 from PIL.Image import Image
@@ -10,7 +11,7 @@ from PIL import Image, ImageDraw, ImageFont
 from dotenv import dotenv_values
 import io
 
-def a1_image_gen(prompts, parent_prompt_id=None):
+async def a1_image_gen(prompts, parent_prompt_id=None):
     config = dotenv_values('.env')
     print("generating prompt: " + prompts[0].text)
     data = {
@@ -33,13 +34,19 @@ def a1_image_gen(prompts, parent_prompt_id=None):
         "script_name": "prompts from file or textbox",
         "script_args": [False, True, "\n".join([prompt.text for prompt in prompts])]
     }
+    async def fetch(session, url):
+        async with session.post(url, json=data, timeout=1000) as response:
+            return await response.json()
 
-    r = requests.post(f"{config['GRADIO_API_BASE_URL']}sdapi/v1/txt2img", json=data)
+
+    async with aiohttp.ClientSession() as session:
+        r = await fetch(session, config['GRADIO_API_BASE_URL'] + 'sdapi/v1/txt2img')
+
+    # r = requests.post(f"{config['GRADIO_API_BASE_URL']}sdapi/v1/txt2img", json=data)
     try:
-        files = r.json()["images"]
+        files = r["images"]
     except:
         print(r)
-        print(r.json())
         return []
     return files
 
@@ -62,12 +69,12 @@ def dalle_image_gen(prompt):
     return [images.data[0].b64_json], images.data[0].revised_prompt
 
 
-def get_generation_from_api(prompts, parent_prompt_id=None) -> Image:
+async def get_generation_from_api(prompts, parent_prompt_id=None) -> Image:
     images = []
     revised_prompt = ""
     # images = a1_image_gen(prompt)
     if prompts[0].method == "stable-diffusion":
-        images = a1_image_gen(prompts, parent_prompt_id)
+        images = await a1_image_gen(prompts, parent_prompt_id)
     elif prompts[0].method == "dalle3":
         images, reworded_prompt = dalle_image_gen(prompts[0])
         revised_prompt = reworded_prompt
@@ -132,8 +139,8 @@ def batch_add_caption(generated_images, prompts):
     return captioned_images
 
 
-def batch_text_to_image(prompts, parent_prompt_id=None):
-    generated_images, revised_prompt = get_generation_from_api(prompts, parent_prompt_id)
+async def batch_text_to_image(prompts, parent_prompt_id=None):
+    generated_images, revised_prompt = await get_generation_from_api(prompts, parent_prompt_id)
     if len(generated_images) == 0:
         return [], ""
     # convert the b64 encoded images to PIL images
@@ -142,8 +149,8 @@ def batch_text_to_image(prompts, parent_prompt_id=None):
     captioned_images = batch_add_caption(generated_images, prompts)
     return captioned_images, revised_prompt
 
-def text_to_image(prompt, parent_prompt_id=None):
-    generated_images, revised_prompt = get_generation_from_api([prompt], parent_prompt_id)
+async def text_to_image(prompt, parent_prompt_id=None):
+    generated_images, revised_prompt = await get_generation_from_api([prompt], parent_prompt_id)
     if len(generated_images) == 0:
         return [], ""
     # convert the b64 encoded images to PIL images
