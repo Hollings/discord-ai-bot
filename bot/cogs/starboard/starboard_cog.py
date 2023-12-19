@@ -24,7 +24,7 @@ class Starboard(commands.Cog):
             return
 
         # if the message is in the starboard channel, return
-        if message.channel == starboard_channel:
+        if message.channel == starboard_channel or message.channel.id == int(self.bot.config['TOURNAMENT_CHANNEL_ID']):
             return
 
         # if the message is not from a bot, return

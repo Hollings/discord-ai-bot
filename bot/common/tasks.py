@@ -67,7 +67,8 @@ async def generate_gif_from_prompt(*, client: discord.Client, prompt_id):
     prompts = [prompt, *children]
 
     #start the update process
-    progress_message = await channel.send("`"+prompt.text+"`")
+    progress_bar = create_progress_bar(0.0, bar_length=max(len(prompt.text),10))
+    progress_message = await channel.send("`"+prompt.text+"`\n`"+progress_bar + "`")
     update_task = asyncio.create_task(update_progress_bar_until_canceled(progress_message, prompt))
     image_list, _ = await txt2img.batch_text_to_image(prompts, parent_prompt_id=prompt.id)
     update_task.cancel()
@@ -260,19 +261,14 @@ def clear_queue():
         app.control.discard_all(connection=conn)
 
 
-def create_progress_bar(percentage, bar_length=10, filled_char='█', empty_char='░'):
-    """
-    Create an ASCII progress bar.
-
-    :param percentage: The completion percentage as a decimal (0 to 1).
-    :param bar_length: The total length of the progress bar in characters.
-    :param filled_char: The character used to represent filled portion.
-    :param empty_char: The character used to represent empty portion.
-    :return: A string representing the progress bar.
-    """
-    filled_length = int(bar_length * percentage)
-    bar = filled_char * filled_length + empty_char * (bar_length - filled_length)
-    return f"[{bar}]"
+def create_progress_bar(percentage, bar_length=10, filled_char='█', empty_char=' '):
+    filled_length = int(round(bar_length * percentage))
+    empty_length = bar_length - filled_length
+    percentage_str = f"{percentage*100:.0f}%"
+    if len(percentage_str) < 3:
+        percentage_str = empty_char + percentage_str
+    bar = filled_char * filled_length + " " + percentage_str + empty_char * empty_length
+    return f"|{bar}|"
 
 async def update_progress_bar_until_canceled(message, prompt):
 
@@ -282,10 +278,10 @@ async def update_progress_bar_until_canceled(message, prompt):
 
     started = False
     async with aiohttp.ClientSession() as session:
-        for i in range(0, 100):
-            logger.info("Updating progress bar for prompt " + str(prompt.text))
-            await asyncio.sleep(5)
+        for i in range(0, 200):
+            await asyncio.sleep(2)
             response = await fetch(session, config['GRADIO_API_BASE_URL'] + 'sdapi/v1/progress')
+
             # edit message with progress bar
             if response['progress'] != 0.0:
                 started = True
@@ -294,7 +290,7 @@ async def update_progress_bar_until_canceled(message, prompt):
                 await message.delete()
                 return
             if response['progress'] > 0.0:
-                progress_bar = create_progress_bar(response['progress'], bar_length=len(prompt.text))
+                progress_bar = create_progress_bar(response['progress'], bar_length=max(len(prompt.text),10))
                 progress_message = f"""`{prompt.text}`
 `{progress_bar}`"""
                 await message.edit(content=progress_message)
