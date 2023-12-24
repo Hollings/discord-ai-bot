@@ -165,7 +165,6 @@ class ImageGen(commands.Cog):
         rounding_format = '0.' + '0' * max_decimal_places
         frames = Decimal((end - current) / frames).quantize(Decimal(rounding_format))
         frames = Decimal(str(frames).rstrip('0').rstrip('.'))
-
         while current <= end:
             full_prompt = base_message.format(current)
             prompt = self.message_to_prompt(message, full_prompt,
