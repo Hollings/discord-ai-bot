@@ -72,7 +72,9 @@ class GptChat(commands.Cog):
         if message.content == "!system":
             await message.channel.send("Current System Prompt: ```" + self.bot.config.get("SYSTEM_PROMPT", "(none)") + "```")
             return
-
+        if message.content == "!system reset" or message.content == "!system clear":
+            self.set_system_prompt("")
+            return
         if message.content.startswith("!system "):
             system_prompt = message.content.replace("!system", "").strip()
             if system_prompt == "roll":
@@ -91,9 +93,7 @@ class GptChat(commands.Cog):
         ctx = await self.bot.get_context(message)
 
         typing_task = asyncio.create_task(self.send_typing_indicator_delayed(ctx))
-        message_content_task = asyncio.create_task(self.get_gpt_chat_response(message))
-        content = await message_content_task
-        # Wait for the typing task to complete if it's still running
+        content = await self.get_gpt_chat_response(message)
         typing_task.cancel()
         if content:
             await message.channel.send(content)
@@ -113,21 +113,31 @@ class GptChat(commands.Cog):
         print("GPT Chat cog loaded")
 
     async def get_gpt_chat_response(self, message: Message):
-        openai.api_key = self.bot.config['OPENAI_API_KEY']
+        try:
+            openai.api_key = self.bot.config['OPENAI_API_KEY']
 
-        messages = [message async for message in message.channel.history(limit=15)]
-        formatted_messages = self.format_chat_history(messages, self.bot.config.get("SYSTEM_PROMPT", ""))
-        # Make the API request
-        response = openai.chat.completions.create(
-            response_format={"type": "json_object"},
-            model="gpt-4-1106-preview",
-            messages=formatted_messages,
-            max_tokens=800,
-        )
-        json_data = json.loads(response.choices[0].message.content)
-        reaction_coroutine = message.add_reaction(json_data["emoji"])
-        await message.channel.send(json_data["content"][:1999])
-        await reaction_coroutine
+            messages = [message async for message in message.channel.history(limit=15)]
+            formatted_messages = self.format_chat_history(messages, self.bot.config.get("SYSTEM_PROMPT", ""))
+            # Make the API request
+            response = openai.chat.completions.create(
+                response_format={"type": "json_object"},
+                model="gpt-4-1106-preview",
+                messages=formatted_messages,
+                max_tokens=800,
+            )
+            json_data = json.loads(response.choices[0].message.content)
+            try:
+                reaction_coroutine = message.add_reaction(json_data["emoji"])
+            except Exception as e:
+                reaction_coroutine = None
+                pass
+
+            await message.channel.send(json_data["content"][:1999])
+
+            if reaction_coroutine:
+                await reaction_coroutine
+        except Exception as e:
+            await message.channel.send("Something went wrong. Please try again later. " + str(e))
 
     def format_chat_history(self, messages, system_prompt="") -> list:
         formatted_messages = [{"role": "system",
