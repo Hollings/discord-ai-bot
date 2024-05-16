@@ -59,13 +59,10 @@ jobs:
           echo "COMMIT_TIMESTAMP=$COMMIT_TIMESTAMP" >> $GITHUB_ENV
 
       - name: Send commit summary to Discord
-        env:
-          DESCRIPTION: "Commit Summary:\n${{ env.COMMIT_SUMMARY }}"
         run: |
-          DESCRIPTION=$(echo "$DESCRIPTION" | sed 's/$/\\n/' | tr -d '\n')
           PAYLOAD=$(cat <<EOF
           {
-            "content": "**New Commit Pushed to ${{ env.COMMIT_BRANCH }}**\n\nCommit Summary:\n${{ DESCRIPTION }}"
+            "content": "**New Commit Pushed to ${{ env.COMMIT_BRANCH }}**\n\nCommit Summary:\n${{ env.COMMIT_SUMMARY }}"
           }
           EOF
           )
