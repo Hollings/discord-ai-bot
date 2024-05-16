@@ -6,6 +6,7 @@ from discord.ext import commands
 from dotenv import dotenv_values
 from peewee import PostgresqlDatabase
 
+from common import tasks
 
 
 class HollingsBot(commands.Bot):
@@ -56,6 +57,10 @@ if __name__ == "__main__":
             await bot.add_cog(Tts(bot))
         if "GptVision" not in bot.cogs:
             await bot.add_cog(GptVision(bot))
+
+        tasks.clear_queue()
+        tasks.queue_all_pending_prompts_task()
+
 
     @bot.event
     async def on_message(message):

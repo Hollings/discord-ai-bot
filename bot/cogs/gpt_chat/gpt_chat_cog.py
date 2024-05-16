@@ -1,10 +1,12 @@
 import asyncio
 import datetime
 import json
+import os
 import random
 import re
 from pathlib import Path
 
+import anthropic
 import openai
 from discord import Message
 from discord.ext import commands
@@ -12,6 +14,7 @@ from discord.ext.commands import Cog, Context
 
 from cogs.gpt_chat.system_prompt import SystemPrompt
 from peewee import fn
+import ollama
 
 
 async def setup(bot):
@@ -26,11 +29,15 @@ class GptChat(commands.Cog):
         self.set_system_prompt()
         # load the "systemprompt.txt" file into the system prompt config
         self.bot.config["SYSTEM_PROMPT"] = open("systemprompt.txt", "r").read()
+        self.anthropic_client = anthropic.Anthropic(
+            api_key=os.environ.get("ANTHROPIC_API_KEY"),
+        )
         print("GPT Chat cog init")
 
     def set_new_random_system_prompt(self):
         # get a random inactive system prompt
-        system_prompt = SystemPrompt.select().where(SystemPrompt.active_on.is_null(True)).order_by(fn.Random()).limit(1).get()
+        system_prompt = SystemPrompt.select().where(SystemPrompt.active_on.is_null(True)).order_by(fn.Random()).limit(
+            1).get()
         # set it active
         system_prompt.set_active()
         self.bot.config["SYSTEM_PROMPT"] = system_prompt.content
@@ -60,8 +67,12 @@ class GptChat(commands.Cog):
     # on message
     @Cog.listener("on_message")
     async def on_message(self, message):
-        if message.channel.id != int(self.bot.config["GPT_CHAT_CHANNEL_ID"]) and message.channel.id != int(self.bot.config["DEBUG_CHANNEL_ID"]):
+        # whitelist_channels =
+        if message.channel.id != int(self.bot.config["GPT_CHAT_CHANNEL_ID"]) and message.channel.id != int(
+                self.bot.config["DEBUG_CHANNEL_ID"]):
             return
+        # if message.channel.id != int(self.bot.config["GPT_CHAT_CHANNEL_ID"]):
+        #     return
 
         if message.content.startswith("!*"):
             return
@@ -70,7 +81,8 @@ class GptChat(commands.Cog):
             return
 
         if message.content == "!system":
-            await message.channel.send("Current System Prompt: ```" + self.bot.config.get("SYSTEM_PROMPT", "(none)") + "```")
+            await message.channel.send(
+                "Current System Prompt: ```" + self.bot.config.get("SYSTEM_PROMPT", "(none)") + "```")
             return
         if message.content == "!system reset" or message.content == "!system clear":
             self.set_system_prompt("")
@@ -81,7 +93,8 @@ class GptChat(commands.Cog):
                 self.set_new_random_system_prompt()
             else:
                 self.set_system_prompt(system_prompt)
-            await message.channel.send("Current System Prompt: ```" + self.bot.config.get("SYSTEM_PROMPT", "(none)") + "```")
+            await message.channel.send(
+                "Current System Prompt: ```" + self.bot.config.get("SYSTEM_PROMPT", "(none)") + "```")
             return
 
         if len(message.attachments) > 0:
@@ -97,7 +110,6 @@ class GptChat(commands.Cog):
         typing_task.cancel()
         if content:
             await message.channel.send(content)
-
 
     async def send_typing_indicator_delayed(self, ctx: Context):
         timer = asyncio.sleep(2)
@@ -116,12 +128,12 @@ class GptChat(commands.Cog):
         try:
             openai.api_key = self.bot.config['OPENAI_API_KEY']
 
-            messages = [message async for message in message.channel.history(limit=15)]
+            messages = [message async for message in message.channel.history(limit=30)]
             formatted_messages = self.format_chat_history(messages, self.bot.config.get("SYSTEM_PROMPT", ""))
             # Make the API request
             response = openai.chat.completions.create(
                 response_format={"type": "json_object"},
-                model="gpt-4-1106-preview",
+                model="gpt-4o",
                 messages=formatted_messages,
                 max_tokens=800,
             )
@@ -137,7 +149,7 @@ class GptChat(commands.Cog):
             if reaction_coroutine:
                 await reaction_coroutine
         except Exception as e:
-            await message.channel.send("Something went wrong. Please try again later. " + str(e))
+            pass
 
     def format_chat_history(self, messages, system_prompt="") -> list:
         formatted_messages = [{"role": "system",
@@ -154,4 +166,26 @@ class GptChat(commands.Cog):
 
             formatted_messages.insert(0, {"role": role,
                                           "content": f"(message author: '{nickname}') {message.content}"})
+        return formatted_messages
+
+    def format_chat_history_anthropic(self, messages, system_prompt="") -> list:
+        # Take the last 10 messages from the chat history
+        formatted_messages = []
+        total_chars = 0
+
+        role = "user"  # Initialize the role as "user"
+
+        for message in messages:
+            total_chars += len(message.content)
+            if total_chars > 5000:
+                break
+            member = message.guild.get_member(message.author.id)
+            nickname = member.nick if member else message.author.name
+
+            formatted_messages.insert(0, {"role": role,
+                                          "content": f"(message author: '{nickname}') {message.content}"})
+
+            # Toggle the role between "user" and "assistant" for the next message
+            role = "assistant" if role == "user" else "user"
+
         return formatted_messages
