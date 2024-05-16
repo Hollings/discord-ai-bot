@@ -190,6 +190,9 @@ class ImageGen(commands.Cog):
 
 
         message_content, modifiers = self.parse_modifiers(message_content, message)
+
+
+
         attachment_urls = [attachment.url for attachment in message.attachments]
         method = "dalle3" if modifiers['dalle'] else "stable-diffusion"
 
@@ -216,6 +219,11 @@ class ImageGen(commands.Cog):
     def check_dalle(self, message_content, modifiers, message=None):
         if not message_content.startswith("$$$") or not message:
             return message_content, modifiers
+
+        if message.channel.id == 1020473974758584351:
+            modifiers['dalle'] = True
+            return message_content[3:], modifiers
+
         user_id = str(message.author.id)
         minutes = 30  # TODO: use a setting here
         try:
@@ -228,7 +236,7 @@ class ImageGen(commands.Cog):
                 (Prompt.created_at > one_hour_ago)
             ).count()
 
-            if prompt_count >= 3:
+            if prompt_count >= 6:
                 last_prompts = Prompt.select(Prompt.created_at).where(
                     (Prompt.user_id == user_id) &
                     (Prompt.method == "dalle3")
