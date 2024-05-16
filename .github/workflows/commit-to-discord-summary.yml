@@ -62,7 +62,7 @@ jobs:
         env:
           DESCRIPTION: "Commit Summary:\n${{ env.COMMIT_SUMMARY }}"
         run: |
-          DESCRIPTION=$(echo "$DESCRIPTION" | sed 's/$/\\n/' | tr -d '\n')
+          DESCRIPTION=$(echo "$DESCRIPTION" | sed 's/$/\\n/' | tr -d '\n' | sed 's/\\n/\\\\n/g')
           PAYLOAD=$(cat <<EOF
           {
             "content": "**New Commit Pushed to ${{ env.COMMIT_BRANCH }}**\n\nCommit Summary:\n$DESCRIPTION"
