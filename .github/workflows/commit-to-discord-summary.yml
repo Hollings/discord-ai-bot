@@ -1,0 +1,70 @@
+name: Commit Summary to Discord
+
+on:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  send_commit_summary:
+    runs-on: ubuntu-latest
+
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+      SYSTEM_PROMPT_FILENAME: DISCORD_COMMIT_MESSAGE_PROMPT.md
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+
+      - name: Get commit diff and generate summary
+        run: |
+          set -e  # Exit on any error
+          handle_error() {
+            echo "Error occurred in commit summary workflow"
+            echo "::warning::Commit summary workflow failed"
+            exit 1
+          }
+          trap 'handle_error' ERR
+          # Get commit details
+          COMMIT_BRANCH=${GITHUB_REF##*/}
+          COMMIT_MESSAGE=$(git log --format=%B -n 1 ${{ github.sha }})
+          COMMIT_URL=${{ github.event.head_commit.url }}
+          COMMIT_AUTHOR=${{ github.event.head_commit.author.name }}
+          COMMIT_TIMESTAMP=$(git log -1 --format=%cd --date=local)
+          # Get commit diff
+          COMMIT_DIFF=$(git diff HEAD^..HEAD)
+          # Read the system prompt from the markdown file (case insensitive)
+          SYSTEM_PROMPT=$(cat "$(find . -iname "$SYSTEM_PROMPT_FILENAME")")
+          USER_PROMPT="Please generate a concise and human-readable summary of the following commit:\n\nCommit Message: ${COMMIT_MESSAGE}\n\nCommit Diff: ${COMMIT_DIFF}"
+          PROMPT=$(jq -n --arg system "$SYSTEM_PROMPT" --arg user "$USER_PROMPT" \
+            '{ "model": "gpt-4", "messages": [ { "role": "system", "content": $system }, { "role": "user", "content": $user } ] }')
+          # Get commit summary from ChatGPT-4
+          RESPONSE=$(curl -s -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$PROMPT" \
+            "https://api.openai.com/v1/chat/completions")
+          SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+          # Save summary and other details for the next step
+          echo "COMMIT_BRANCH=$COMMIT_BRANCH" >> $GITHUB_ENV
+          echo "COMMIT_SUMMARY<<EOF" >> $GITHUB_ENV
+          echo "$SUMMARY" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+          echo "COMMIT_URL=$COMMIT_URL" >> $GITHUB_ENV
+          echo "COMMIT_AUTHOR=$COMMIT_AUTHOR" >> $GITHUB_ENV
+          echo "COMMIT_TIMESTAMP=$COMMIT_TIMESTAMP" >> $GITHUB_ENV
+
+      - name: Send commit summary to Discord
+        run: |
+          PAYLOAD=$(cat <<EOF
+          {
+            "content": "**New Commit Pushed to ${{ env.COMMIT_BRANCH }}**\n\nCommit Summary:\n${{ env.COMMIT_SUMMARY }}"
+          }
+          EOF
+          )
+
+          curl -X POST -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK"
