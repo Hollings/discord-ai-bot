@@ -40,7 +40,7 @@ jobs:
           COMMIT_DIFF=$(git diff HEAD^..HEAD)
           # Read the system prompt from the markdown file (case insensitive)
           SYSTEM_PROMPT=$(cat "$(find . -iname "$SYSTEM_PROMPT_FILENAME")")
-          USER_PROMPT="Please generate a concise and human-readable summary of the following commit:\n\nCommit Message: ${COMMIT_MESSAGE}\n\nCommit Diff: ${COMMIT_DIFF}"
+          USER_PROMPT="Please generate a concise and human-readable summary, and then some ascii art based on the following commit:\n\nCommit Message: ${COMMIT_MESSAGE}\n\nCommit Diff: ${COMMIT_DIFF}"
           PROMPT=$(jq -n --arg system "$SYSTEM_PROMPT" --arg user "$USER_PROMPT" \
             '{ "model": "gpt-4", "messages": [ { "role": "system", "content": $system }, { "role": "user", "content": $user } ] }')
           # Get commit summary from ChatGPT-4
