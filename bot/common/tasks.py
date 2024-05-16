@@ -192,7 +192,7 @@ def create_text_to_image_task(prompt: Prompt):
     else:
         print("Invalid method")
 
-@app.task(bind=True, name='text_to_image_task_local', queue='local', max_retries=None, default_retry_delay=600)
+@app.task(bind=True, name='text_to_image_task_local', queue='local', max_retries=None, default_retry_delay=60)
 def text_to_image_task_local(self, prompt_id):
     logger.info("Running task for prompt " + str(prompt_id))
     try:

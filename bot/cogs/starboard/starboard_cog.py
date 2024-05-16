@@ -1,7 +1,5 @@
-import os
 
-import requests
-from discord import Message, File
+from discord import Message
 from discord.ext import commands
 from discord.ext.commands import Cog
 
@@ -33,10 +31,6 @@ class Starboard(commands.Cog):
         if not message.author.bot:
             return
 
-        if payload.member.bot:
-            return
-
-
         # # Check if the message already exists in the starboard channel
         # async for existing_message in starboard_channel.history(limit=100):  # Adjust limit as needed
         #     if f"{message.jump_url}" in existing_message.content:
@@ -46,20 +40,7 @@ class Starboard(commands.Cog):
         if message.channel.guild != starboard_channel.guild:
             return
 
-
-        # file = None
-        # if message.attachments:
-        #     url = message.attachments[0].url
-        #     r = requests.get(url, stream=True)
-        #     if r.status_code == 200:
-        #         with open('tempfile', 'wb') as f:
-        #             for chunk in r.iter_content(chunk_size=1024):
-        #                 f.write(chunk)
-        #         file = File('tempfile', filename=message.attachments[0].filename)
         link = message.attachments[
             0].url if message.attachments else f"> **{message.author.name}**: {message.content}"
         self.seen_ids.append(message.id)
         await starboard_channel.send(f"{message.jump_url}\n{link}")
-        # # delete the temporary file
-        # if file is not None:
-        #     os.remove('tempfile')
