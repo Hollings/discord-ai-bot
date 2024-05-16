@@ -1,10 +1,14 @@
 import asyncio
+import base64
+import mimetypes
+import os
 import random
 
 import openai
 from discord import Message
 from discord.ext import commands
 from discord.ext.commands import Cog, Context
+import anthropic
 
 PROMPT_OPTIONS = [
         "You are a news anchor who is reporting on this image. Please write a script for a breaking news story related to this image.",
@@ -23,6 +27,7 @@ PROMPT_OPTIONS = [
         "Describe how an image like this could have happened?",
         "Assume this image is one image in a sequence or events. What do you think is going to happen next in this situation?",
         "Assume someone or something caused this to happen. Whose fault is this?",
+        "return the body of an SVG image representation of this image. Do your best, it doesnt have to be perfect"
     ]
 
 async def setup(bot):
@@ -32,12 +37,16 @@ async def setup(bot):
 class GptVision(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.client = anthropic.Anthropic(
+            # defaults to os.environ.get("ANTHROPIC_API_KEY")
+            api_key=os.environ.get("ANTHROPIC_API_KEY"),
+        )
         print("GPT Chat cog init")
 
     # on message
     @Cog.listener("on_message")
     async def on_message(self, message):
-        if message.channel.id != int(self.bot.config["GPT_CHAT_CHANNEL_ID"]):
+        if message.channel.id != int(self.bot.config["GPT_CHAT_CHANNEL_ID"]) and message.channel.id != 1020473974758584351:
             return
 
         if message.author.bot:
@@ -47,7 +56,9 @@ class GptVision(commands.Cog):
             # send typing indicator
             ctx = await self.bot.get_context(message)
             typing_task = asyncio.create_task(self.send_typing_indicator_delayed(ctx))
-            message_content_task = asyncio.create_task(self.get_gpt_vision_response(message))
+            message_content_task = asyncio.create_task(self.get_claude_vision_response(message))
+
+            # message_content_task = asyncio.create_task(self.get_gpt_vision_response(message))
             content = await message_content_task
             # Wait for the typing task to complete if it's still running
             typing_task.cancel()
@@ -86,7 +97,7 @@ class GptVision(commands.Cog):
             }
         ]
 
-        if self.bot.config["SYSTEM_PROMPT"]:
+        if self.bot.config["SYSTEM_PROMPT"] and message.channel.id != 1020473974758584351:
             messages.insert(0, {"role": "system", "content": self.bot.config["SYSTEM_PROMPT"]})
 
         response = openai.chat.completions.create(
@@ -96,3 +107,55 @@ class GptVision(commands.Cog):
         )
         response_text = response.choices[0].message.content
         await message.channel.send(response_text[:1999])
+
+
+
+    async def get_claude_vision_response(self, message: Message):
+
+        if not message.content or len(message.content) < 1:
+            prompt = random.choice(PROMPT_OPTIONS)
+        else:
+            prompt = message.content
+
+        # Download the image and convert it to base64
+        image_data = await message.attachments[0].read()
+        image_base64 = base64.b64encode(image_data).decode('utf-8')
+
+        # Get the file extension from the attachment's filename
+        file_extension = message.attachments[0].filename.split('.')[-1].lower()
+
+        # Determine the media type based on the file extension
+        media_type = mimetypes.types_map.get(f'.{file_extension}')
+        messages = [
+            {
+
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": media_type,
+                            "data": image_base64,
+                        },
+                    },
+                    {
+                        "type": "text",
+                        "text": prompt,
+                    }
+                ],
+            }
+        ]
+        system = ""
+        if self.bot.config["SYSTEM_PROMPT"] and message.channel.id != 1020473974758584351:
+            system = self.bot.config["SYSTEM_PROMPT"]
+
+        response = self.client.messages.create(
+            model="claude-3-opus-20240229",
+            system=system,
+            max_tokens=1024,
+            messages=messages,
+        )
+
+        print(prompt)
+        await message.channel.send(response.content[0].text[:1999])
