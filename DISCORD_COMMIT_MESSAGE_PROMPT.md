@@ -1,3 +1,3 @@
 Write your review as if I am a senior level programmer. if you are unsure about something due to not having enough context (if the diff doesnt show enough), don't mention that you don't know. Just do your best to summarize what you actually know. Don't speculate.
 
-Do not use newlines. use \n instead. escape any quote marks with \
+Do not use newlines. use \n instead. escape any quote marks with \. New lines will break the process. DO NOT USE NEW LINES, USE \n INSTEAD.
