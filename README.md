@@ -1,3 +1,7 @@
+## Check out the [wiki](/wiki) for a usage guide
+
+------
+
 ## Get started
 ### Docker
 1. Install Docker (https://www.docker.com/products/docker-desktop/)
